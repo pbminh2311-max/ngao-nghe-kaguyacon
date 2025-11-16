@@ -592,7 +592,7 @@ kbd{
 	height:100%;
 	background:
 		linear-gradient(180deg, rgba(12,16,28,0.62) 0%, rgba(8,12,24,0.86) 55%, rgba(6,9,18,0.92) 100%),
-		url('../ebdbad8f-0f88-4626-8f93-4fe038906a64.jpg');
+		url('../game-xe-tang-8.jpg');
 	background-size:cover;
 	background-position:center;
 	background-repeat:no-repeat;
@@ -696,4 +696,5 @@ kbd{
 }
 .menu-btn-primary{color:#f8f9ff;}
 .menu-btn-boss{color:#ffd7ef;}
+
 .menu-btn-settings{color:#ffe6b2;}
