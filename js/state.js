@@ -50,6 +50,10 @@ export function setDevNoWalls(val) { devNoWalls = val; }
 export function setDevGodMode(val) { devGodMode = val; }
 export function setDevOneHitKill(val) { devOneHitKill = val; }
 
+export let p1FocusMode = false;
+export let p2FocusMode = false;
+export function setP1FocusMode(val) { p1FocusMode = val; }
+export function setP2FocusMode(val) { p2FocusMode = val; }
 // --- Object Pools ---
 export const ObjectPools = {
     bullets: [],

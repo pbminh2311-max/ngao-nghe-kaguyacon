@@ -5,6 +5,23 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>ngạo nghễ kaguyacon</title>
 <link rel="stylesheet" href="css/styles.css">
+<style>
+    /* Custom Scrollbar for Dev Panel */
+    #devInstructionsCard::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    #devInstructionsCard::-webkit-scrollbar-track {
+        background: rgba(15, 23, 42, 0.8); /* slate-900 */
+        border-radius: 10px;
+    }
+
+    #devInstructionsCard::-webkit-scrollbar-thumb {
+        background-color: #4a5568; /* slate-600 */
+        border-radius: 10px;
+        border: 2px solid rgba(15, 23, 42, 0.8);
+    }
+</style>
 </head>
 <body>
 <div class="glow a"></div><div class="glow b"></div>
@@ -104,6 +121,12 @@
             <div class="settings-row">
                 <label><input type="checkbox" id="settingsInstructions" checked> Hiển thị hướng dẫn</label>
             </div>
+            <div class="settings-row">
+                <label><input type="checkbox" id="settingsP1Focus"> P1 Khóa mục tiêu</label>
+            </div>
+            <div class="settings-row">
+                <label><input type="checkbox" id="settingsP2Focus"> P2 Khóa mục tiêu</label>
+            </div>
         </div>
         <div class="settings-group">
             <div class="settings-title">Thông số</div>
@@ -181,162 +204,78 @@
     
     <!-- Game UI will be drawn on canvas -->
 </div>
-<section id="devInstructionsCard" class="card dev-instructions bottom-panel hidden" aria-label="Hướng dẫn Developer Mode">
-    <h4>Developer Mode</h4>
-    <p>Bật để thử nhanh các buff/tính năng. Các phím tắt sau chỉ hoạt động khi Developer Mode đang bật.</p>
-    <div class="dev-grid">
-        <div class="row">
-            <div class="key"><kbd>1</kbd></div>
-            <div class="desc">Spawn buff Hồi máu — Hồi 1 HP (tối đa bằng HP gốc).</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>2</kbd></div>
-            <div class="desc">Spawn buff Tăng tốc — Tăng tốc di chuyển, giảm ma sát trong 10 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>3</kbd></div>
-            <div class="desc">Spawn buff Đạn tự dẫn — Đạn tự điều hướng theo đối thủ trong 10 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>4</kbd></div>
-            <div class="desc">Spawn buff Tàng hình — Tàng hình 10 giây (không hiển thị thân xe và HUD cạnh xe).</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>5</kbd></div>
-            <div class="desc">Spawn buff Thu nhỏ — Thu nhỏ kích thước xe trong 10 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>6</kbd></div>
-            <div class="desc">Spawn buff Khiên — Miễn sát thương trong 10 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>7</kbd></div>
-            <div class="desc">Spawn buff Nạp nhanh — Hồi đạn nhanh gấp 5 lần trong 10 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>8</kbd></div>
-            <div class="desc">Spawn buff Đạn to — Đạn to hơn trong 10 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>9</kbd></div>
-            <div class="desc">Spawn buff Phân thân — Tạo phân thân đứng bắn hỗ trợ (không di chuyển).</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>0</kbd></div>
-            <div class="desc">Spawn buff Bắn chùm — Mỗi lần bắn bắn 3 viên trong 10 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>Q</kbd></div>
-            <div class="desc">Spawn buff Nảy vô hạn — Đạn nảy vô hạn trong 10 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>Y</kbd></div>
-            <div class="desc">Spawn buff Kẻ địch khổng lồ — Tăng kích thước đối thủ gấp 2 trong 10 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>E</kbd></div>
-            <div class="desc">Spawn buff Đảo phím — Đảo ngược phím điều khiển của đối thủ trong 10 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>R</kbd></div>
-            <div class="desc">Spawn buff Đạn nổ — Đạn nổ (không nảy, gây sát thương vùng) trong 10 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>T</kbd></div>
-            <div class="desc">Spawn buff Trói chân — Khoá chân đối thủ 5 giây (không di chuyển, vẫn xoay được).</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>U</kbd></div>
-            <div class="desc">Spawn buff Đạn xuyên — Đạn đi xuyên vật cản và xe tăng trong 10 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>I</kbd></div>
-            <div class="desc">Spawn buff Đạn độc — Đạn gây độc trừ HP theo thời gian trong 10 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>P</kbd></div>
-            <div class="desc">Spawn buff Bom nguyên tử — Đặt HP tất cả xe tăng về 1 ngay lập tức.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>K</kbd></div>
-            <div class="desc">Spawn buff Câm lặng — Đối thủ không thể bắn đạn trong 8 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>J</kbd></div>
-            <div class="desc">Spawn buff Dung nham — Đạn để lại vệt cháy gây sát thương 10 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>L</kbd></div>
-            <div class="desc">Spawn buff Thôi miên — Khiến đối thủ di chuyển, quay, bắn random 1-3 viên 5 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>Z</kbd></div>
-            <div class="desc">Spawn buff Tăng tốc bắn — Giảm thởi gian nạp đạn 70% trong 10 giây.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>X</kbd></div>
-            <div class="desc">Spawn buff Cuồng nộ — Sát thương x2, mất 0.1HP/giây, dừng khi HP=0.1.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>H</kbd></div>
-            <div class="desc">Full HP cho cả hai người chơi ngay lập tức.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>B</kbd></div>
-            <div class="desc">Spawn ngẫu nhiên 1 viên đạn ở giữa màn hình (dùng để test phản xạ tường).</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>O</kbd></div>
-            <div class="desc">Reset trận — Xoá boss/clone, hồi vị trí, sinh map mới.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>F</kbd></div>
-            <div class="desc">Fast reload — Tăng tốc hồi đạn cho cả hai trong phiên hiện tại.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>N</kbd></div>
-            <div class="desc">Toggle No Walls — Bật/tắt va chạm và hiển thị tường.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>G</kbd></div>
-            <div class="desc">Toggle Bất tử — Bật/tắt miễn sát thương cho hai người chơi.</div>
-        </div>
-        <div class="row">
-            <div class="key"><kbd>M</kbd></div>
-            <div class="desc">Toggle 1 Hit Kill — Đạn gây 999999 damage (tức chết luôn).</div>
-        </div>
+<div id="devInstructionsCard" class="card hidden" style="position: absolute; top: 60px; right: 10px; width: 280px; max-height: 450px; overflow-y: auto; z-index: 100; padding: 15px; background: rgba(20, 30, 45, 0.9); border: 1px solid #4a5568;">
+    <h3 style="margin-top: 0; color: #ffd700; border-bottom: 1px solid #4a5568; padding-bottom: 8px;">Dev Mode Keys</h3>
+    <div style="display: grid; grid-template-columns: auto 1fr; gap: 5px 15px; font-size: 13px;">
+        <strong style="color: #a0aec0;">H:</strong> <span style="color: #e2e8f0;">Hồi đầy HP</span>
+        <strong style="color: #a0aec0;">O:</strong> <span style="color: #e2e8f0;">Reset ván đấu</span>
+        <strong style="color: #a0aec0;">G:</strong> <span style="color: #e2e8f0;">Bật/Tắt Bất tử</span>
+        <strong style="color: #a0aec0;">M:</strong> <span style="color: #e2e8f0;">Bật/Tắt 1-Hit Kill</span>
+        <strong style="color: #a0aec0;">N:</strong> <span style="color: #e2e8f0;">Bật/Tắt Tường</span>
+        <strong style="color: #a0aec0;">F:</strong> <span style="color: #e2e8f0;">Nạp đạn siêu nhanh</span>
+        <strong style="color: #a0aec0;">B:</strong> <span style="color: #e2e8f0;">Tạo 1 viên đạn</span>
+        
+        <h4 style="grid-column: 1 / -1; color: #63b3ed; margin: 10px 0 5px;">Tạo Buff:</h4>
+        <strong style="color: #a0aec0;">Z:</strong> <span style="color: #e2e8f0;">Hồi máu</span>
+        <strong style="color: #a0aec0;">C:</strong> <span style="color: #e2e8f0;">Đạn tự dẫn</span>
+        <strong style="color: #a0aec0;">V:</strong> <span style="color: #e2e8f0;">Tàng hình</span>
+        <strong style="color: #a0aec0;">2:</strong> <span style="color: #e2e8f0;">Tăng tốc</span>
+        <strong style="color: #a0aec0;">5:</strong> <span style="color: #e2e8f0;">Thu nhỏ</span>
+        <strong style="color: #a0aec0;">6:</strong> <span style="color: #e2e8f0;">Khiên</span>
+        <strong style="color: #a0aec0;">7:</strong> <span style="color: #e2e8f0;">Nạp nhanh</span>
+        <strong style="color: #a0aec0;">8:</strong> <span style="color: #e2e8f0;">Đạn to</span>
+        <strong style="color: #a0aec0;">9:</strong> <span style="color: #e2e8f0;">Phân thân</span>
+        <strong style="color: #a0aec0;">0:</strong> <span style="color: #e2e8f0;">Bắn chùm</span>
+        <strong style="color: #a0aec0;">Q:</strong> <span style="color: #e2e8f0;">Nảy vô hạn</span>
+        <strong style="color: #a0aec0;">R:</strong> <span style="color: #e2e8f0;">Đạn nổ</span>
+        <strong style="color: #a0aec0;">U:</strong> <span style="color: #e2e8f0;">Đạn xuyên</span>
+        <strong style="color: #a0aec0;">I:</strong> <span style="color: #e2e8f0;">Đạn độc</span>
+        <strong style="color: #a0aec0;">J:</strong> <span style="color: #e2e8f0;">Dung nham</span>
+        <strong style="color: #a0aec0;">X:</strong> <span style="color: #e2e8f0;">Cuồng nộ</span>
+        <strong style="color: #a0aec0;">P:</strong> <span style="color: #e2e8f0;">Bom nguyên tử</span>
+        
+        <h4 style="grid-column: 1 / -1; color: #f6ad55; margin: 10px 0 5px;">Tạo Debuff:</h4>
+        <strong style="color: #a0aec0;">Y:</strong> <span style="color: #e2e8f0;">Kẻ địch khổng lồ</span>
+        <strong style="color: #a0aec0;">E:</strong> <span style="color: #e2e8f0;">Đảo phím</span>
+        <strong style_color: #a0aec0;>T:</strong> <span style="color: #e2e8f0;">Trói chân</span>
+        <strong style="color: #a0aec0;">K:</strong> <span style="color: #e2e8f0;">Câm lặng</span>
+        <strong style="color: #a0aec0;">L:</strong> <span style="color: #e2e8f0;">Thôi miên</span>
+
+        <h4 style="grid-column: 1 / -1; color: #f56565; margin: 10px 0 5px;">Test Boss Mode:</h4>
+        <strong style="color: #a0aec0;">1:</strong> <span style="color: #e2e8f0;">Thêm tất cả buff</span>
+        <strong style="color: #a0aec0;">3:</strong> <span style="color: #e2e8f0;">Xóa tất cả buff</span>
     </div>
-</section>
+    <button class="settings-close-x" style="top: 12px; right: 12px;">×</button>
 </div>
 
 <!-- Instructions Panel at bottom -->
 <section id="instructionsPanel" class="card bottom-panel hidden" aria-label="Hướng dẫn">
     <button class="settings-close-x" id="instructionsCloseX">×</button>
-    <div class="settings-header">
+    <div class="instructions-header">
         <h4>Hướng dẫn chơi</h4>
         <p>Cách điều khiển và mẹo chơi game.</p>
     </div>
-    <div class="settings-grid">
-        <div class="settings-group">
-            <div class="settings-title">Player 1</div>
-            <ul style="margin:0;padding-left:20px;color:#c9d5ef;">
-                <li><span>Tiến / Lùi</span> <kbd>W</kbd> · <kbd>S</kbd></li>
-                <li><span>Quay trái / phải</span> <kbd>A</kbd> · <kbd>D</kbd></li>
-                <li><span>Bắn</span> <kbd>Space</kbd></li>
+    <div class="instructions-grid">
+        <div class="player-block">
+            <div class="player-title">Player 1</div>
+            <ul>
+                <li><span>Tiến / Lùi</span><kbd>W</kbd> · <kbd>S</kbd></li>
+                <li><span>Quay trái / phải</span><kbd>A</kbd> · <kbd>D</kbd></li>
+                <li><span>Bắn</span><kbd>Space</kbd></li>
             </ul>
         </div>
-        <div class="settings-group">
-            <div class="settings-title">Player 2</div>
-            <ul style="margin:0;padding-left:20px;color:#c9d5ef;">
-                <li><span>Tiến / Lùi</span> <kbd>↑</kbd> · <kbd>↓</kbd></li>
-                <li><span>Quay trái / phải</span> <kbd>←</kbd> · <kbd>→</kbd></li>
-                <li><span>Bắn</span> <kbd>Enter</kbd></li>
+        <div class="player-block">
+            <div class="player-title">Player 2</div>
+            <ul>
+                <li><span>Tiến / Lùi</span><kbd>↑</kbd> · <kbd>↓</kbd></li>
+                <li><span>Quay trái / phải</span><kbd>←</kbd> · <kbd>→</kbd></li>
+                <li><span>Bắn</span><kbd>Enter</kbd></li>
             </ul>
         </div>
-        <div class="settings-group">
-            <div class="settings-title">Mẹo chơi</div>
-            <ul style="margin:0;padding-left:20px;color:#c9d5ef;">
-                <li>Đạn nảy tối đa 6 lần trừ khi buff thay đổi.</li>
+        <div class="player-block tips">
+            <div class="player-title">Mẹo chơi</div>
+            <ul>
+                <li>Đạn nảy tối đa 8 lần trừ khi buff thay đổi.</li>
                 <li>Tường và biên đều phản xạ đạn — cẩn thận tự bắn mình.</li>
                 <li>Giữ phím bắn để tích năng lượng đạn mạnh hơn.</li>
             </ul>
@@ -365,6 +304,157 @@
 </div>
 
 <script type="module" src="js/main.js"></script>
+<script>
+    // --- Draggable Dev Instructions Panel ---
+    const panel = document.getElementById('devInstructionsCard');
+    const header = panel.querySelector('h3');
 
+    // --- Close Button Logic ---
+    const closeBtn = panel.querySelector('.settings-close-x');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => panel.classList.add('hidden'));
+    }
+
+    // --- Dragging Logic ---
+    let isDragging = false;
+    let offsetX, offsetY;
+
+    if (header) {
+        header.style.cursor = 'move';
+        header.style.userSelect = 'none';
+
+        header.addEventListener('mousedown', (e) => {
+            if (e.target !== header) return; // Only drag if mousedown is on the header itself
+            isDragging = true;
+            
+            // Calculate offset from the top-left corner of the panel
+            offsetX = e.clientX - panel.offsetLeft;
+            offsetY = e.clientY - panel.offsetTop;
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+    }
+
+    function onMouseMove(e) {
+        if (!isDragging) return;
+
+        // Calculate new position
+        let newX = e.clientX - offsetX;
+        let newY = e.clientY - offsetY;
+
+        panel.style.left = `${newX}px`;
+        panel.style.top = `${newY}px`;
+    }
+
+    function onMouseUp() {
+        isDragging = false;
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+    }
+
+    // --- Resizing Logic ---
+    let isResizing = false;
+    let resizeDirections = { top: false, right: false, bottom: false, left: false };
+    let startX, startY, startWidth, startHeight, startLeft, startTop;
+    const borderZone = 8; // 8px area around the edges for resizing
+
+    panel.addEventListener('mousemove', (e) => {
+        if (isResizing || isDragging) return;
+
+        const rect = panel.getBoundingClientRect();
+        const onLeft = Math.abs(e.clientX - rect.left) < borderZone;
+        const onRight = Math.abs(e.clientX - rect.right) < borderZone;
+        const onTop = Math.abs(e.clientY - rect.top) < borderZone;
+        const onBottom = Math.abs(e.clientY - rect.bottom) < borderZone;
+
+        if ((onTop && onLeft) || (onBottom && onRight)) {
+            panel.style.cursor = 'nwse-resize';
+        } else if ((onTop && onRight) || (onBottom && onLeft)) {
+            panel.style.cursor = 'nesw-resize';
+        } else if (onTop || onBottom) {
+            panel.style.cursor = 'ns-resize';
+        } else if (onLeft || onRight) {
+            panel.style.cursor = 'ew-resize';
+        } else {
+            panel.style.cursor = 'default';
+        }
+    });
+
+    panel.addEventListener('mousedown', (e) => {
+        // Prevent resizing when clicking the header or close button
+        if (e.target === header || e.target === closeBtn) return;
+
+        const rect = panel.getBoundingClientRect();
+        resizeDirections.top = Math.abs(e.clientY - rect.top) < borderZone;
+        resizeDirections.bottom = Math.abs(e.clientY - rect.bottom) < borderZone;
+        resizeDirections.left = Math.abs(e.clientX - rect.left) < borderZone;
+        resizeDirections.right = Math.abs(e.clientX - rect.right) < borderZone;
+
+        if (Object.values(resizeDirections).some(dir => dir)) {
+            isResizing = true;
+            e.preventDefault();
+
+            startX = e.clientX;
+            startY = e.clientY;
+            startWidth = panel.offsetWidth;
+            startHeight = panel.offsetHeight;
+            startLeft = panel.offsetLeft;
+            startTop = panel.offsetTop;
+
+            document.addEventListener('mousemove', handleResizeMove);
+            document.addEventListener('mouseup', handleResizeUp);
+        }
+    });
+
+    function handleResizeMove(e) {
+        if (!isResizing) return;
+
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+
+        if (resizeDirections.right) {
+            panel.style.width = `${startWidth + dx}px`;
+        }
+        if (resizeDirections.bottom) {
+            panel.style.height = `${startHeight + dy}px`;
+        }
+        if (resizeDirections.left) {
+            panel.style.width = `${startWidth - dx}px`;
+            panel.style.left = `${startLeft + dx}px`;
+        }
+        if (resizeDirections.top) {
+            panel.style.height = `${startHeight - dy}px`;
+            panel.style.top = `${startTop + dy}px`;
+        }
+    }
+
+    function handleResizeUp() {
+        isResizing = false;
+        resizeDirections = { top: false, right: false, bottom: false, left: false };
+        document.removeEventListener('mousemove', handleResizeMove);
+        document.removeEventListener('mouseup', handleResizeUp);
+    }
+
+    // --- Click outside to close settings panel ---
+    const settingsPanel = document.getElementById('settingsPanel');
+    if (settingsPanel) {
+        settingsPanel.addEventListener('click', (e) => {
+            // If the click is on the overlay itself (the background), close the panel.
+            if (e.target === settingsPanel) {
+                settingsPanel.classList.add('hidden');
+            }
+        });
+    }
+
+    // --- Close Instructions Panel ---
+    const instructionsPanel = document.getElementById('instructionsPanel');
+    const instructionsCloseBtn = document.getElementById('instructionsCloseX');
+    if (instructionsPanel && instructionsCloseBtn) {
+        instructionsCloseBtn.addEventListener('click', () => {
+            instructionsPanel.classList.add('hidden');
+        });
+    }
+</script>
 </body>
 </html>

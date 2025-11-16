@@ -14,7 +14,7 @@ class Bullet{
     constructor(x,y,angle,owner){
         this.x=x; this.y=y; this.r=4; this.owner=owner;
         this.bounces=0; this.maxBounces=8; this.alive=true;
-        let speed=4.5;
+        let speed=6.5;
         
         // Apply bullet speed multiplier if owner has it
         if (owner && owner.bulletSpeedMultiplier) {

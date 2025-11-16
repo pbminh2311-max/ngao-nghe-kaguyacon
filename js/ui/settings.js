@@ -1,13 +1,15 @@
 import { flashMsg, toggleDevMode } from '../main.js';
 import { updateGameModeUI } from '../game/bossMode.js';
 import { spawnBot } from '../game/gameController.js';
-import { devMode, setDevMode, p1, p2, boss, gameMode } from '../state.js';
+import { devMode, setDevMode, p1, p2, boss, gameMode, p1FocusMode, setP1FocusMode, p2FocusMode, setP2FocusMode } from '../state.js';
 
 const settingsPanel = document.getElementById('settingsPanel');
 const instructionsPanel = document.getElementById('instructionsPanel');
 const settingsCloseX = document.getElementById('settingsCloseX');
 const instructionsCloseX = document.getElementById('instructionsCloseX');
 const settingsDevModeInput = document.getElementById('settingsDevMode');
+const settingsP1FocusInput = document.getElementById('settingsP1Focus');
+const settingsP2FocusInput = document.getElementById('settingsP2Focus');
 const settingsInstructionsInput = document.getElementById('settingsInstructions');
 const settingsFullscreenBtn = document.getElementById('settingsFullscreenBtn');
 const settingsSpawnBotBtn = document.getElementById('settingsSpawnBot');
@@ -47,6 +49,8 @@ export function syncSettingsUI() {
     if (settingsDevModeInput) settingsDevModeInput.checked = devMode;
     const instructionsVisible = instructionsPanel ? !instructionsPanel.classList.contains('hidden') : false;
     if (settingsInstructionsInput) settingsInstructionsInput.checked = instructionsVisible;
+    if (settingsP1FocusInput) settingsP1FocusInput.checked = p1FocusMode;
+    if (settingsP2FocusInput) settingsP2FocusInput.checked = p2FocusMode;
 
     if (settingsMaxHpInput && p1) settingsMaxHpInput.value = Math.round(p1.maxHp);
     if (settingsSpeedInput && p1) {
@@ -162,6 +166,14 @@ export function initSettings() {
         toggleDevMode(!!e.target.checked);
     });
     if (settingsInstructionsInput) settingsInstructionsInput.addEventListener('change', e => toggleInstructionsPanel(!!e.target.checked));
+    if (settingsP1FocusInput) settingsP1FocusInput.addEventListener('change', e => {
+        setP1FocusMode(!!e.target.checked);
+        flashMsg(`P1 Focus Mode ${p1FocusMode ? 'ON' : 'OFF'}`);
+    });
+    if (settingsP2FocusInput) settingsP2FocusInput.addEventListener('change', e => {
+        setP2FocusMode(!!e.target.checked);
+        flashMsg(`P2 Focus Mode ${p2FocusMode ? 'ON' : 'OFF'}`);
+    });
     if (settingsSpawnBotBtn) settingsSpawnBotBtn.addEventListener('click', () => { spawnBot(); toggleSettingsPanel(false); });
 
     const settingsInputs = [

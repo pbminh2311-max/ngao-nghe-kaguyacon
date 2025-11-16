@@ -25,6 +25,16 @@ export function styleBulletForOwner(bullet, owner){
     bullet.glow = false;
     bullet.explosionRadius = 80;
     
+    // Special styling for mini slimes (must be checked before instanceof Boss)
+    if (owner.isMiniSlime) {
+        bullet.color = '#4ade80'; // Green slime color
+        bullet.shape = 'slime';
+        bullet.wobbleSpeed = 0.005;
+        bullet.r = 4; // Regular size
+        bullet.glow = true;
+        return;
+    }
+
     // Special styling for boss bullets
     if (owner instanceof Boss) {
         bullet.r = 8; // Larger boss bullets
@@ -44,8 +54,8 @@ export function styleBulletForOwner(bullet, owner){
                 bullet.shape = 'energy';
                 bullet.trailLength = 8;
                 break;
-            default:
-                bullet.color = '#ef4444';
+            default: // Golem, Treant, and other future bosses get their own color
+                bullet.color = owner.color || '#ef4444';
                 bullet.shape = 'tech';
                 bullet.pulseSpeed = 0.008;
                 break;
@@ -56,7 +66,7 @@ export function styleBulletForOwner(bullet, owner){
     const isExplosive = !!owner.explosive;
     const isRicochet = !!owner.ricochet;
     const isPierce = !!owner.pierce;
-    const hasPoison = !!owner.poisonBullet;
+    const isPoison = !!owner.poisonBullet;
     const hasTrail = !!owner.trailBullet;
     const hasRapidfire = !!owner.rapidfire;
     const hasShotgun = !!owner.shotgun;
@@ -65,8 +75,8 @@ export function styleBulletForOwner(bullet, owner){
     bullet.isHoming = isHoming;
     bullet.isExplosive = isExplosive;
     bullet.isRicochet = isRicochet;
-    bullet.isPiercing = isPierce;
-    bullet.isPoison = hasPoison;
+    bullet.isPiercing = isPierce || hasTrail; // Lava bullets now also pierce
+    bullet.isPoison = isPoison;
     bullet.isTrail = hasTrail;
     if(isPierce && !bullet.piercedTargets){
         bullet.piercedTargets = new Set();
@@ -98,7 +108,7 @@ export function styleBulletForOwner(bullet, owner){
         bullet.r = Math.max(bullet.r, 4.5);
     }
 
-    const colorOrder = ['poison','pierce','ricochet','rapidfire','shotgun','bigBullet','homing','explosive','trailBullet'];
+    const colorOrder = ['poisonBullet','pierce','ricochet','rapidfire','shotgun','bigBullet','homing','explosive','trailBullet'];
     const colorLookup = {
         poison: BUFF_COLORS.poison,
         pierce: BUFF_COLORS.pierce,
@@ -110,9 +120,11 @@ export function styleBulletForOwner(bullet, owner){
         explosive: BUFF_COLORS.explosive,
         trailBullet: BUFF_COLORS.trail
     };
+    colorLookup.poisonBullet = BUFF_COLORS.poison; // Add mapping for the correct property name
+
     let color = '#f33';
     for(const key of colorOrder){
-        if(owner[key]){
+        if(owner[key] === true){
             color = colorLookup[key];
         }
     }
@@ -124,10 +136,10 @@ export function styleBulletForOwner(bullet, owner){
     } else if(isPierce){
         bullet.guidelineColor = '#5fd6ff';
     }
-    if(hasRapidfire || isRicochet || hasBigBullet || hasShotgun || isExplosive || isPierce || hasPoison){
+    if(hasRapidfire || isRicochet || hasBigBullet || hasShotgun || isExplosive || isPierce || isPoison){
         bullet.glow = true;
     }
-    if(hasPoison){
+    if(isPoison){
         bullet.poisonPulse = 0;
     }
 }

@@ -12,7 +12,7 @@ export default
 class Tank{
     constructor(x,y,color,controls){
         this.x=x; this.y=y; this.r=16; this.angle=0; this.speed=0;
-        this.color=color; this.controls={...(controls||{})};
+        this.vx = 0; this.vy = 0; this.color=color; this.controls={...(controls||{})};
         this.turnSpeed=0.06; this.moveSpeed=0.5; this.friction=0.93;
         this.hp=3; this.maxHp=3; this.lastShot=0; this.reload=320;
         this.maxAmmo=3; this.ammo=this.maxAmmo; this.reloadRate=1/60; this.reloadCooldown=0;
@@ -24,6 +24,7 @@ class Tank{
         this.pierce=false; this.poisonBullet=false;
         this.possession=false; this.trailBullet=false;
         this.fireRate=false; this.fury=false;
+        this.focusMode = false;
         this.possessionBulletCount=0;
         this.activeEffects = {};
         this.baseMoveSpeed = this.moveSpeed;
@@ -50,6 +51,14 @@ update(dt,input){
     if (this.hp <= 0) {
         this.speed = 0;
         this.renderAlpha = 0; // Làm cho xe tăng biến mất
+        return;
+    }
+    // DEBUG: Check if stun is being applied
+    if (this.stunned) {
+        console.log(`[Stun] Tank ${this === p1 ? 'P1' : 'P2'} is stunned. Preventing movement.`);
+        this.speed = 0;
+        this.vx = 0;
+        this.vy = 0;
         return;
     }
     // nếu tank đang bị root thì không được di chuyển (vẫn có thể quay)
@@ -212,7 +221,74 @@ update(dt,input){
             ctx.fillRect(barrelStartX + barrelWidth - 2, barrelY + 1, 2, barrelHeight - 2);
         }
 
-ctx.restore();
+        // Fury effect
+        if (this.fury) {
+            const color = BUFF_COLORS.fury;
+            const time = performance.now() * 0.008;
+            const pulse = 1 + Math.sin(time) * 0.1;
+            
+            // Pulsating outer ring
+            drawEffectRing(ctx, 0, 0, (radius + 10) * pulse, color, { lineWidth: 3, alpha: 0.8, glow: true });
+
+            // Sharp, fiery spikes
+            ctx.save(); // Save before spike drawing
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.7 + Math.sin(time * 2) * 0.3;
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2 + time * 0.2;
+                ctx.save();
+                ctx.rotate(angle);
+                ctx.strokeRect(radius + 2, -1, 8 + Math.sin(time * 3 + i) * 4, 2);
+                ctx.restore();
+            }
+            ctx.restore(); // Restore after spike drawing
+        }
+
+        // Possession effect
+        const possessionState = this.activeEffects && this.activeEffects.possession;
+        if(possessionState){
+            const color = (possessionState.meta && possessionState.meta.color) || BUFF_COLORS.possession;
+            const chaos = Math.sin(this.effectPhase * 6) * 0.5;
+            const pulse = 1 + Math.sin(this.effectPhase * 5) * 0.3;
+            drawEffectRing(ctx, 0, 0, radius + 12 + pulse + chaos, color, { lineWidth: 3, alpha: 0.85, dash: [4,4], glow: true });
+            ctx.save();
+            ctx.rotate(this.effectPhase * 2 - this.angle); // Counter-rotate to keep it static-ish
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.6;
+            for(let i = 0; i < 8; i++){
+                const ang = (i / 8) * Math.PI * 2;
+                const r1 = radius + 8;
+                const r2 = radius + 16;
+                ctx.beginPath();
+                ctx.moveTo(Math.cos(ang) * r1, Math.sin(ang) * r1);
+                ctx.lineTo(Math.cos(ang) * r2, Math.sin(ang) * r2);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        ctx.restore(); // This is the main restore for the tank's transform
+
+        // Burning effect from lava trail
+        if (this.isBurning) {
+            const time = performance.now() * 0.01;
+            ctx.save();
+            ctx.globalAlpha = 0.8;
+            // No translate needed, draw at absolute position
+            for (let i = 0; i < 5; i++) {
+                const angle = (i / 5) * Math.PI * 2 + time * 0.5;
+                const r = radius + 4 + Math.sin(time + i) * 3;
+                const particleX = this.x + Math.cos(angle) * r;
+                const particleY = this.y + Math.sin(angle) * r;
+                ctx.fillStyle = Math.random() > 0.5 ? '#ff4500' : '#ff8c00';
+                ctx.beginPath();
+                ctx.arc(particleX, particleY, 1 + Math.random() * 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
 
         // Heal pulse
         if(this.healPulseTimer > 0){
@@ -285,29 +361,6 @@ ctx.restore();
             ctx.moveTo(radius + 6, -radius - 6);
             ctx.lineTo(-radius - 6, radius + 6);
             ctx.stroke();
-            ctx.restore();
-        }
-
-        if(this.possession){
-            const color = BUFF_COLORS.possession;
-            const chaos = Math.sin(this.effectPhase * 6) * 0.5;
-            const pulse = 1 + Math.sin(this.effectPhase * 5) * 0.3;
-            drawEffectRing(ctx, this.x, this.y, radius + 12 + pulse + chaos, color, { lineWidth: 3, alpha: 0.85, dash: [4,4], glow: true });
-            ctx.save();
-            ctx.translate(this.x, this.y);
-            ctx.rotate(this.effectPhase * 2);
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 2;
-            ctx.globalAlpha = 0.6;
-            for(let i = 0; i < 8; i++){
-                const ang = (i / 8) * Math.PI * 2;
-                const r1 = radius + 8;
-                const r2 = radius + 16;
-                ctx.beginPath();
-                ctx.moveTo(Math.cos(ang) * r1, Math.sin(ang) * r1);
-                ctx.lineTo(Math.cos(ang) * r2, Math.sin(ang) * r2);
-                ctx.stroke();
-            }
             ctx.restore();
         }
 
@@ -459,7 +512,15 @@ ctx.restore();
         this.invisible = false;
         this.shield = false;
         this.shotgun = false;
-        this.bounce = false;
+        this.trailBullet = false;
+        this.pierce = false;
+        this.fury = false;
+        this.ricochet = false; // Was 'bounce'
+        this.poisonBullet = false;
+        this.bigBullet = false;
+        this.explosive = false;
+        this.isBurning = false;
+        this.healPulseTimer = 0;
         this.displayRadius = this.r;
     }
     

@@ -2,7 +2,7 @@ import {
     flashMsg
 } from '../main.js';
 import {
-    p1, p2, tanks, setTanks, boss, setBoss, gameMode, setGameMode,
+    p1, p2, tanks, setTanks, boss, setBoss, gameMode, setGameMode, setP1FocusMode, setP2FocusMode,
     setBullets, setBuffs
 } from '../state.js';
 import { W, H } from '../canvas.js';
@@ -10,6 +10,7 @@ import { showStatus } from '../systems/effects.js';
 import { resetAfterKill } from './gameController.js';
 import { bossModeBuffs } from '../constants.js';
 import Boss from '../classes/Boss.js';
+import { syncSettingsUI } from '../ui/settings.js';
 
 // --- State ---
 export let bossMode = {
@@ -42,6 +43,11 @@ export function startBossMode() {
     bossMode.permanentBuffs = [];
     bossMode.showingBuffSelection = false;
 
+    // Mặc định bật Focus Mode cho cả 2 người chơi
+    setP1FocusMode(true);
+    setP2FocusMode(true);
+    syncSettingsUI();
+
     setTanks([p1, p2]);
     p1.hp = p1.maxHp;
     p2.hp = p2.maxHp;
@@ -67,6 +73,11 @@ export function exitBossMode() {
     bossMode.active = false;
     bossMode.showingBuffSelection = false;
     bossMode.permanentBuffs = [];
+
+    // Tắt Focus Mode khi thoát
+    setP1FocusMode(false);
+    setP2FocusMode(false);
+    syncSettingsUI();
 
     setTanks([p1, p2]);
     p1.resetStatus();
@@ -103,7 +114,13 @@ export function spawnBossForFloor(floor) {
         case 3: bossType = 'golem'; bossName = 'Golem Đá'; break;
         case 4: bossType = 'witch'; bossName = 'Phù Thủy Bóng Đêm'; break;
         case 5: bossType = 'treant'; bossName = 'Người Cây Cổ Đại'; break;
-        default: bossType = 'normal'; bossName = `Boss Tầng ${floor}`; break;
+        default: {
+            const specialBosses = ['slime', 'wolf', 'golem', 'witch', 'treant'];
+            const bossNames = {'slime': 'Slime Chúa', 'wolf': 'Sói Đêm', 'golem': 'Golem Đá', 'witch': 'Phù Thủy Bóng Đêm', 'treant': 'Người Cây Cổ Đại'};
+            bossType = specialBosses[Math.floor(Math.random() * specialBosses.length)];
+            bossName = `${bossNames[bossType]} Biến Dị`;
+            break;
+        }
     }
 
     const newBoss = new Boss(W/2, H/2, bossType);

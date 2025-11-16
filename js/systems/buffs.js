@@ -30,7 +30,7 @@ export const BuffFactory = {
             case 'pierce':
                 return this.createToggleEffect(target, 'pierce', duration, color, playerName, 'Đạn xuyên');
             case 'poisonShots':
-                return this.createToggleEffect(target, 'poisonBullet', duration, color, playerName, 'Đạn độc');
+                return this.createToggleEffect(target, 'poisonBullet', duration, BUFF_COLORS.poison, playerName, 'Đạn độc');
             case 'trail':
                 return this.createToggleEffect(target, 'trailBullet', duration, color, playerName, 'Dung nham');
             default:
@@ -61,7 +61,7 @@ export const BuffFactory = {
                 if(state.healTimer >= 1000) {
                     tank.hp = Math.min(tank.maxHp, tank.hp + state.healRate);
                     state.healTimer = 0;
-                    showStatus(tank, `+${state.healRate} HP`, color, 600);
+                    showStatus(tank, 'Hồi máu', color, 600);
                 }
             }
         );

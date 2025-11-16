@@ -109,21 +109,24 @@ export function renderAnimations(ctx, now) {
             const progress = elapsed / exp.duration;
             const alpha = 1 - progress;
             const currentRadius = Math.max(0, exp.radius * (0.5 + progress * 0.5));
+            
             if (exp.isWave) {
+                ctx.save();
                 ctx.globalAlpha = alpha * 0.4;
                 ctx.strokeStyle = exp.color || '#6366f1';
                 ctx.lineWidth = 4;
                 ctx.beginPath();
                 ctx.arc(exp.x, exp.y, currentRadius, 0, Math.PI * 2);
                 ctx.stroke();
+                ctx.restore();
             } else {
-                ctx.globalAlpha = alpha * 0.6;
-                ctx.fillStyle = exp.color || '#f44';
-                ctx.beginPath();
-                ctx.arc(exp.x, exp.y, currentRadius, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        });
+            ctx.globalAlpha = alpha * 0.6;
+            ctx.fillStyle = exp.color || '#f44';
+            ctx.beginPath();
+            ctx.arc(exp.x, exp.y, currentRadius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    });
         ctx.restore();
     }
 

@@ -2,7 +2,7 @@ import { W, H } from '../canvas.js';
 import { clamp, dist } from '../utils.js';
 import { circleRectColl, findCollisionPoint, lineRectColl } from './collision.js';
 import { obstacles } from './obstacles.js';
-import { devNoWalls, tanks } from '../state.js';
+import { devNoWalls, tanks, gameMode, boss, p1, p2, p1FocusMode, p2FocusMode } from '../state.js';
 import { flashMsg } from '../main.js';
 import { addExplosion } from '../rendering/animations.js';
 
@@ -19,76 +19,138 @@ function collidesAt(px, py, r) {
 export function updateTankPhysics(tank, dt, input) {
     if (tank.stunned) {
         tank.speed = 0;
+        tank.vx = 0;
+        tank.vy = 0;
         return; // No input processing if stunned
     }
 
+    const focusMode = (tank === p1 && p1FocusMode) || (tank === p2 && p2FocusMode);
     const isRooted = !!tank.rooted;
 
-    // --- Rotation ---
-    if (tank.possession) {
-        // Chaotic movement
-        const chaos = Math.random();
-        if (chaos < 0.3) {
-            tank.angle += (Math.random() - 0.5) * 0.2 * dt / 16;
-        } else if (chaos < 0.6) {
-            tank.angle -= tank.turnSpeed * dt / 16;
+    if (focusMode) {
+        // --- FOCUS MODE LOGIC ---
+
+        // 1. Auto-aiming
+        let target = null;
+        if (gameMode === 'vsboss' && boss && boss.hp > 0) {
+            target = boss;
         } else {
-            tank.angle += tank.turnSpeed * dt / 16;
+            target = (tank === p1) ? p2 : p1;
         }
-    } else {
-        if (input[tank.controls.left]) tank.angle -= tank.turnSpeed * dt / 16;
-        if (input[tank.controls.right]) tank.angle += tank.turnSpeed * dt / 16;
-    }
 
-    // --- Movement ---
-    if (!isRooted) {
-        if (tank.possession) {
-            // Chaotic movement
-            if (Math.random() < 0.3) {
-                tank.speed += tank.moveSpeed * dt / 16;
-            } else if (Math.random() < 0.5) {
-                tank.speed -= tank.moveSpeed * dt / 16;
-            }
-        } else {
-            if (input[tank.controls.forward]) tank.speed += tank.moveSpeed * dt / 16;
-            if (input[tank.controls.back]) tank.speed -= tank.moveSpeed * dt / 16;
+        if (target && target.hp > 0) {
+            tank.angle = Math.atan2(target.y - tank.y, target.x - tank.x);
         }
-        tank.speed *= tank.friction;
 
-        const moveX = Math.cos(tank.angle) * tank.speed;
-        const moveY = Math.sin(tank.angle) * tank.speed;
-        const targetX = clamp(tank.x + moveX, tank.r + 4, W - tank.r - 4);
-        const targetY = clamp(tank.y + moveY, tank.r + 4, H - tank.r - 4);
+        // 2. Movement (Forward/Backward + Strafing)
+        if (!isRooted) {
+            let forwardSpeed = 0;
+            if (input[tank.controls.forward]) forwardSpeed += tank.moveSpeed;
+            if (input[tank.controls.back]) forwardSpeed -= tank.moveSpeed;
 
-        let moved = false;
-        if (devNoWalls || !collidesAt(targetX, targetY, tank.r)) {
-            tank.x = targetX;
-            tank.y = targetY;
-            moved = true;
-        } else {
-            const canSlideY = !collidesAt(tank.x, targetY, tank.r);
-            const canSlideX = !collidesAt(targetX, tank.y, tank.r);
-
-            if (canSlideY) {
-                tank.y = targetY;
-                tank.speed *= 0.85;
-                moved = true;
+            let strafeSpeed = 0;
+            if (tank === p1) {
+                // Đảo ngược điều khiển di chuyển ngang cho P1
+                if (input[tank.controls.right]) strafeSpeed -= tank.moveSpeed * 0.8; // D -> di chuyển sang trái
+                if (input[tank.controls.left]) strafeSpeed += tank.moveSpeed * 0.8;  // A -> di chuyển sang phải
+            } else {
+                if (input[tank.controls.right]) strafeSpeed += tank.moveSpeed * 0.8;
+                if (input[tank.controls.left]) strafeSpeed -= tank.moveSpeed * 0.8;
             }
-            if (!moved && canSlideX) {
+
+            // Combine speeds using vectors
+            const forwardAngle = tank.angle;
+            const strafeAngle = tank.angle + Math.PI / 2;
+
+            const totalMoveX = (Math.cos(forwardAngle) * forwardSpeed) + (Math.cos(strafeAngle) * strafeSpeed);
+            const totalMoveY = (Math.sin(forwardAngle) * forwardSpeed) + (Math.sin(strafeAngle) * strafeSpeed);
+            
+            // Apply movement with friction
+            tank.vx = (tank.vx * tank.friction) + (totalMoveX * dt / 16);
+            tank.vy = (tank.vy * tank.friction) + (totalMoveY * dt / 16);
+
+            const targetX = clamp(tank.x + tank.vx, tank.r + 4, W - tank.r - 4);
+            const targetY = clamp(tank.y + tank.vy, tank.r + 4, H - tank.r - 4);
+
+            // Simplified collision for strafing
+            if (devNoWalls || !collidesAt(targetX, targetY, tank.r)) {
                 tank.x = targetX;
-                tank.speed *= 0.85;
-                moved = true;
+                tank.y = targetY;
+            } else {
+                if (!collidesAt(tank.x, targetY, tank.r)) tank.y = targetY;
+                if (!collidesAt(targetX, tank.y, tank.r)) tank.x = targetX;
+                tank.vx *= -0.3;
+                tank.vy *= -0.3;
             }
-            if (!moved) {
-                tank.speed *= -0.35;
-            }
+        } else {
+            tank.vx = 0;
+            tank.vy = 0;
         }
 
-        tank.x = clamp(tank.x, tank.r + 4, W - tank.r - 4);
-        tank.y = clamp(tank.y, tank.r + 4, H - tank.r - 4);
     } else {
-        // Ensure rooted tank does not move
-        tank.speed = 0;
+        // --- NORMAL MODE LOGIC ---
+
+        // --- Rotation ---
+        if (tank.possession) {
+            const chaos = Math.random();
+            if (chaos < 0.3) tank.angle += (Math.random() - 0.5) * 0.2 * dt / 16;
+            else if (chaos < 0.6) tank.angle -= tank.turnSpeed * dt / 16;
+            else tank.angle += tank.turnSpeed * dt / 16;
+        } else {
+            if (input[tank.controls.left]) tank.angle -= tank.turnSpeed * dt / 16;
+            if (input[tank.controls.right]) tank.angle += tank.turnSpeed * dt / 16;
+        }
+
+        // --- Movement (Normal Mode) ---
+        if (!isRooted) {
+            if (tank.possession) {
+                // Chaotic movement
+                if (Math.random() < 0.3) {
+                    tank.speed += tank.moveSpeed * dt / 16;
+                } else if (Math.random() < 0.5) {
+                    tank.speed -= tank.moveSpeed * dt / 16;
+                }
+            } else {
+                if (input[tank.controls.forward]) tank.speed += tank.moveSpeed * dt / 16;
+                if (input[tank.controls.back]) tank.speed -= tank.moveSpeed * dt / 16;
+            }
+            tank.speed *= tank.friction;
+
+            const moveX = Math.cos(tank.angle) * tank.speed;
+            const moveY = Math.sin(tank.angle) * tank.speed;
+            const targetX = clamp(tank.x + moveX, tank.r + 4, W - tank.r - 4);
+            const targetY = clamp(tank.y + moveY, tank.r + 4, H - tank.r - 4);
+
+            let moved = false;
+            if (devNoWalls || !collidesAt(targetX, targetY, tank.r)) {
+                tank.x = targetX;
+                tank.y = targetY;
+                moved = true;
+            } else {
+                const canSlideY = !collidesAt(tank.x, targetY, tank.r);
+                const canSlideX = !collidesAt(targetX, tank.y, tank.r);
+
+                if (canSlideY) {
+                    tank.y = targetY;
+                    tank.speed *= 0.85;
+                    moved = true;
+                }
+                if (!moved && canSlideX) {
+                    tank.x = targetX;
+                    tank.speed *= 0.85;
+                    moved = true;
+                }
+                if (!moved) {
+                    tank.speed *= -0.35;
+                }
+            }
+
+            tank.x = clamp(tank.x, tank.r + 4, W - tank.r - 4);
+            tank.y = clamp(tank.y, tank.r + 4, H - tank.r - 4);
+        } else {
+            // Ensure rooted tank does not move
+            tank.speed = 0;
+        }
     }
 }
 
@@ -107,23 +169,31 @@ function bounceBullet(bullet, wall) {
         const distToBottom = Math.abs(bullet.y - (wall.y + wall.h));
         const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
 
-        if (minDist === distToLeft || minDist === distToRight) {
-            bullet.vx = -bullet.vx;
-            bullet.x = (bullet.x < cx) ? wall.x - bullet.r - 1.0 : wall.x + wall.w + bullet.r + 1.0;
+        if (minDist === distToLeft) { // Hit left side
+            bullet.vx = -Math.abs(bullet.vx);
+            bullet.x = wall.x - bullet.r - 0.1;
+        } else if (minDist === distToRight) { // Hit right side
+            bullet.vx = Math.abs(bullet.vx);
+            bullet.x = wall.x + wall.w + bullet.r + 0.1;
+        } else if (minDist === distToTop) { // Hit top side
+            bullet.vy = -Math.abs(bullet.vy);
+            bullet.y = wall.y - bullet.r - 0.1;
         } else {
-            bullet.vy = -bullet.vy;
-            bullet.y = (bullet.y < cy) ? wall.y - bullet.r - 1.0 : wall.y + bullet.h + bullet.r + 1.0;
+            bullet.vy = Math.abs(bullet.vy);
+            bullet.y = wall.y + wall.h + bullet.r + 0.1;
         }
     } else { // Va chạm biên
-        if (bullet.x < bullet.r) { bullet.vx = -bullet.vx; bullet.x = bullet.r + 1.0; }
-        else if (bullet.x > W - bullet.r) { bullet.vx = -bullet.vx; bullet.x = W - bullet.r - 1.0; }
-        if (bullet.y < bullet.r) { bullet.vy = -bullet.vy; bullet.y = bullet.r + 1.0; }
-        else if (bullet.y > H - bullet.r) { bullet.vy = -bullet.vy; bullet.y = H - bullet.r - 1.0; }
+        if (bullet.x <= bullet.r) { bullet.vx = Math.abs(bullet.vx); bullet.x = bullet.r + 0.1; }
+        else if (bullet.x >= W - bullet.r) { bullet.vx = -Math.abs(bullet.vx); bullet.x = W - bullet.r - 0.1; }
+        if (bullet.y <= bullet.r) { bullet.vy = Math.abs(bullet.vy); bullet.y = bullet.r + 0.1; }
+        else if (bullet.y >= H - bullet.r) { bullet.vy = -Math.abs(bullet.vy); bullet.y = H - bullet.r - 0.1; }
     }
 
+    // Small push to ensure it's out
     const sp = Math.hypot(bullet.vx, bullet.vy) || 1;
     bullet.x += (bullet.vx / sp) * 0.5;
     bullet.y += (bullet.vy / sp) * 0.5;
+
     bullet.bounces++;
 }
 

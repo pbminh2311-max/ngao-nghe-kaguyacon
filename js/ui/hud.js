@@ -24,11 +24,21 @@ function renderEffects(t, el) {
     }
     effects.sort((a, b) => a.remaining - b.remaining);
     el.classList.remove('empty');
-    el.innerHTML = effects.map(effect => {
+
+    const maxBuffsToShow = 3;
+    const buffsToShow = effects.slice(0, maxBuffsToShow);
+
+    let html = buffsToShow.map(effect => {
         const seconds = effect.remaining / 1000;
         const timeText = seconds >= 10 ? Math.round(seconds) : seconds.toFixed(1);
         return `<div class="effect" style="--effect-color:${effect.color}"><span class="label">${effect.label}</span><span class="time">${timeText}s</span></div>`;
     }).join('');
+
+    if (effects.length > maxBuffsToShow) {
+        html += `<div class="effect" style="--effect-color:#8faad0; padding: 4px 8px;">...</div>`;
+    }
+
+    el.innerHTML = html;
 }
 
 export function updateHUD() {
