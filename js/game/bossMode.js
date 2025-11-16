@@ -190,7 +190,7 @@ export function applyBossModeBuff(buffType) {
         const stats = target.bossBuffStats;
         switch(buffType) {
             case 'muscle':
-                stats.baseDamage += 10000;
+                stats.baseDamage += 1;
                 target.damage = stats.baseDamage;
                 showStatus(target, `💪 Damage: ${target.damage}`, '#ff6b35', 2000);
                 break;
@@ -314,3 +314,4 @@ export function initBossMode() {
     });
 
 }
+
