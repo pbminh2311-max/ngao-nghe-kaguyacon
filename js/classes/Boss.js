@@ -873,7 +873,7 @@ drawModernHealthBar(ctx) {
     switch(this.bossType) {
         case 'slime':
             primaryColor = '#4ade80'; secondaryColor = '#22c55e'; accentColor = '#16a34a';
-            bossName = 'HOÀNG THẠCH ĐẾ'; bossIcon = '🟢'; 
+            bossName = 'Slime chúa'; bossIcon = '🟢'; 
             break;
         case 'wolf':
             primaryColor = '#6366f1'; secondaryColor = '#4338ca'; accentColor = '#3730a3';
@@ -1795,4 +1795,5 @@ drawModernHealthBar(ctx) {
         
         flashMsg('🌱 Người cây triệu hồi rễ cây!');
     }
+
 }
