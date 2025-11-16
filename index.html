@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>ngạo nghễ kaguyacon</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="glow a"></div><div class="glow b"></div>
+<div id="gameWrap">
+<header class="card">
+<div>
+<h3 style="margin:0">Ngạo nghễ Kaguyacon</h3>
+</div>
+<div class="hud">
+    <div class="info" id="msg"></div>
+</div>
+</header>
+<section class="card top-hud" aria-label="Trạng thái trận đấu">
+    <div class="top-hud-inner">
+        <div class="hp p1">
+            <div class="hp-label">P1</div>
+            <div class="hp-bar">
+                <div class="hp-fill" id="p1HpFill" style="width:100%"></div>
+                <div class="hp-text" id="p1HpText">HP: 3/3</div>
+            </div>
+            <div class="hp-effects empty" id="p1Effects"></div>
+        </div>
+        <div class="scoreboard" id="scoreBoard" data-lead="tie">
+            <div class="score-team p1">
+                <span class="label">P1</span>
+                <span class="value" id="scoreP1Value">0</span>
+            </div>
+            <div class="vs">VS</div>
+            <div class="score-team p2">
+                <span class="label">P2</span>
+                <span class="value" id="scoreP2Value">0</span>
+            </div>
+        </div>
+        <div class="hp p2">
+            <div class="hp-label">P2</div>
+            <div class="hp-bar">
+                <div class="hp-fill" id="p2HpFill" style="width:100%"></div>
+                <div class="hp-text" id="p2HpText">HP: 3/3</div>
+            </div>
+            <div class="hp-effects empty" id="p2Effects"></div>
+        </div>
+    </div>
+ </section>
+<section class="card instructions hidden" id="instructionsCard">
+    <div class="instructions-header">
+        <h4>Hướng dẫn điều khiển</h4>
+        <p>Giữ phím càng lâu xe tăng càng trượt; bắn cần nạp lại mỗi 0.32s.</p>
+    </div>
+    <div class="instructions-grid">
+        <div class="player-block tips">
+            <div class="player-title">Mẹo chơi</div>
+            <ul>
+                <li>Đạn nảy tối đa 8 lần trừ khi buff thay đổi.</li>
+                <li>Tường và biên đều phản xạ đạn — cẩn thận tự bắn mình.</li>
+                <li>Giữ phím bắn để tích năng lượng đạn mạnh hơn.</li>
+            </ul>
+        </div>
+        <div class="player-block">
+            <div class="player-title">Người chơi 1</div>
+            <ul>
+                <li><span>Tiến / Lùi</span><kbd>W</kbd> · <kbd>S</kbd></li>
+                <li><span>Quay trái / phải</span><kbd>A</kbd> · <kbd>D</kbd></li>
+                <li><span>Bắn</span><kbd>Space</kbd></li>
+            </ul>
+        </div>
+        <div class="player-block">
+            <div class="player-title">Người chơi 2</div>
+            <ul>
+                <li><span>Tiến / Lùi</span><kbd>↑</kbd> · <kbd>↓</kbd></li>
+                <li><span>Quay trái / phải</span><kbd>←</kbd> · <kbd>→</kbd></li>
+                <li><span>Bắn</span><kbd>Enter</kbd></li>
+            </ul>
+        </div>
+        <div class="player-block dev">
+            <div class="player-title">Developer Mode</div>
+            <p>Bật bằng nút bên phải để thử nhanh các buff.</p>
+            <div id="devHint">
+                <div class="hint-row"><kbd>1-0</kbd>, <kbd>Q</kbd>, <kbd>Y</kbd>, <kbd>E</kbd>, <kbd>R</kbd>, <kbd>T</kbd>, <kbd>U</kbd>, <kbd>I</kbd>, <kbd>P</kbd>, <kbd>K</kbd>, <kbd>J</kbd>, <kbd>L</kbd> = spawn buff tương ứng</div>
+                <div class="hint-row"><kbd>H</kbd> full HP · <kbd>B</kbd> spawn đạn · <kbd>O</kbd> reset game · <kbd>F</kbd> fast reload · <kbd>N</kbd> bật/tắt no wall · <kbd>G</kbd> bật/tắt bất tử</div>
+            </div>
+        </div>
+    </div>
+</section>
+<section id="settingsPanel" class="overlay-panel hidden" aria-label="Cài đặt">
+    <div class="card settings" style="position:relative;">
+        <button class="settings-close-x" id="settingsCloseX">×</button>
+        <div class="settings-header">
+            <h4>Cài đặt</h4>
+            <p>Điều chỉnh Developer Mode, hiển thị và thông số gameplay.</p>
+        </div>
+    <div class="settings-grid">
+        <div class="settings-group">
+            <div class="settings-title">Tùy chọn</div>
+            <div class="settings-row">
+                <label><input type="checkbox" id="settingsDevMode"> Developer Mode</label>
+            </div>
+            <div class="settings-row">
+                <label><input type="checkbox" id="settingsInstructions" checked> Hiển thị hướng dẫn</label>
+            </div>
+        </div>
+        <div class="settings-group">
+            <div class="settings-title">Thông số</div>
+            <div class="settings-row">
+                <span>Max HP</span>
+                <input id="settingsMaxHp" class="settings-input" type="number" step="0.1" min="0.1" value="3">
+            </div>
+            <div class="settings-row">
+                <span>Tốc độ</span>
+                <input id="settingsSpeed" class="settings-input" type="number" step="0.01" min="0.01" value="0.5">
+            </div>
+            <div class="settings-row">
+                <span>Số đạn tối đa</span>
+                <input id="settingsAmmo" class="settings-input" type="number" step="1" min="1" value="3">
+
+            </div>
+            <div class="settings-row">
+                <span>Thời gian nạp đạn (ms)</span>
+                <input id="settingsReload" class="settings-input" type="number" step="10" min="0" value="320">
+
+            </div>
+            <div class="settings-row">
+                <span>Tốc độ quay</span>
+                <input id="settingsTurnSpeed" class="settings-input" type="number" step="0.01" min="0.01" value="0.06">
+
+            </div>
+            <div class="settings-row">
+                <span>Ma sát</span>
+                <input id="settingsFriction" class="settings-input" type="number" step="0.01" min="0.01" max="1" value="0.93">
+
+            </div>
+            <div class="settings-row">
+                <span>Tốc độ hồi đạn</span>
+                <input id="settingsReloadRate" class="settings-input" type="number" step="0.001" min="0.001" value="0.0167">
+
+            </div>
+        </div>
+        <div class="settings-group">
+            <div class="settings-title">Hành động</div>
+            <div class="settings-actions">
+                <button id="settingsFullscreenBtn">Toàn màn hình</button>
+            </div>
+        </div>
+        <div class="settings-group">
+            <div class="settings-title">VS Boss Mode</div>
+            <div class="settings-actions">
+                <button class="btn" id="bossModeBtn2P">2 Players VS Boss</button>
+                <button class="btn" id="exitBossModeBtn" style="margin-top: 10px; --btn-from: #ff4757; --btn-to: #ff3742; --btn-shadow: rgba(255,71,87,0.3); display: none;">Exit Boss Mode</button>
+            </div>
+        </div>
+    </div>
+    </div>
+</section>
+<!-- Game canvas container -->
+<div class="game-container">
+    <canvas id="c" width="900" height="560"></canvas>
+    
+    <!-- Main Menu Overlay -->
+    <div id="mainMenuOverlay" class="main-menu-overlay">
+        <div class="main-menu-container">
+            <h1 class="main-menu-title">Ngạo nghễ Kaguyacon</h1>
+            <p class="main-menu-subtitle">Đế vương phải có long ngai</p>
+            
+            <div class="main-menu-buttons">
+                <button class="menu-btn menu-btn-primary" id="menuBtnPvP">Player vs Player</button>
+                
+                <button class="menu-btn menu-btn-boss" id="menuBtnBoss">VS Boss Mode</button>
+                
+                <button class="menu-btn menu-btn-settings" id="menuBtnSettings">Settings</button>
+            </div>
+            
+            <div class="menu-version">Version 2.0.0</div>
+        </div>
+    </div>
+    
+    <!-- Game UI will be drawn on canvas -->
+</div>
+<section id="devInstructionsCard" class="card dev-instructions bottom-panel hidden" aria-label="Hướng dẫn Developer Mode">
+    <h4>Developer Mode</h4>
+    <p>Bật để thử nhanh các buff/tính năng. Các phím tắt sau chỉ hoạt động khi Developer Mode đang bật.</p>
+    <div class="dev-grid">
+        <div class="row">
+            <div class="key"><kbd>1</kbd></div>
+            <div class="desc">Spawn buff Hồi máu — Hồi 1 HP (tối đa bằng HP gốc).</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>2</kbd></div>
+            <div class="desc">Spawn buff Tăng tốc — Tăng tốc di chuyển, giảm ma sát trong 10 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>3</kbd></div>
+            <div class="desc">Spawn buff Đạn tự dẫn — Đạn tự điều hướng theo đối thủ trong 10 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>4</kbd></div>
+            <div class="desc">Spawn buff Tàng hình — Tàng hình 10 giây (không hiển thị thân xe và HUD cạnh xe).</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>5</kbd></div>
+            <div class="desc">Spawn buff Thu nhỏ — Thu nhỏ kích thước xe trong 10 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>6</kbd></div>
+            <div class="desc">Spawn buff Khiên — Miễn sát thương trong 10 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>7</kbd></div>
+            <div class="desc">Spawn buff Nạp nhanh — Hồi đạn nhanh gấp 5 lần trong 10 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>8</kbd></div>
+            <div class="desc">Spawn buff Đạn to — Đạn to hơn trong 10 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>9</kbd></div>
+            <div class="desc">Spawn buff Phân thân — Tạo phân thân đứng bắn hỗ trợ (không di chuyển).</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>0</kbd></div>
+            <div class="desc">Spawn buff Bắn chùm — Mỗi lần bắn bắn 3 viên trong 10 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>Q</kbd></div>
+            <div class="desc">Spawn buff Nảy vô hạn — Đạn nảy vô hạn trong 10 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>Y</kbd></div>
+            <div class="desc">Spawn buff Kẻ địch khổng lồ — Tăng kích thước đối thủ gấp 2 trong 10 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>E</kbd></div>
+            <div class="desc">Spawn buff Đảo phím — Đảo ngược phím điều khiển của đối thủ trong 10 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>R</kbd></div>
+            <div class="desc">Spawn buff Đạn nổ — Đạn nổ (không nảy, gây sát thương vùng) trong 10 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>T</kbd></div>
+            <div class="desc">Spawn buff Trói chân — Khoá chân đối thủ 5 giây (không di chuyển, vẫn xoay được).</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>U</kbd></div>
+            <div class="desc">Spawn buff Đạn xuyên — Đạn đi xuyên vật cản và xe tăng trong 10 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>I</kbd></div>
+            <div class="desc">Spawn buff Đạn độc — Đạn gây độc trừ HP theo thời gian trong 10 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>P</kbd></div>
+            <div class="desc">Spawn buff Bom nguyên tử — Đặt HP tất cả xe tăng về 1 ngay lập tức.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>K</kbd></div>
+            <div class="desc">Spawn buff Câm lặng — Đối thủ không thể bắn đạn trong 8 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>J</kbd></div>
+            <div class="desc">Spawn buff Dung nham — Đạn để lại vệt cháy gây sát thương 10 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>L</kbd></div>
+            <div class="desc">Spawn buff Thôi miên — Khiến đối thủ di chuyển, quay, bắn random 1-3 viên 5 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>Z</kbd></div>
+            <div class="desc">Spawn buff Tăng tốc bắn — Giảm thởi gian nạp đạn 70% trong 10 giây.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>X</kbd></div>
+            <div class="desc">Spawn buff Cuồng nộ — Sát thương x2, mất 0.1HP/giây, dừng khi HP=0.1.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>H</kbd></div>
+            <div class="desc">Full HP cho cả hai người chơi ngay lập tức.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>B</kbd></div>
+            <div class="desc">Spawn ngẫu nhiên 1 viên đạn ở giữa màn hình (dùng để test phản xạ tường).</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>O</kbd></div>
+            <div class="desc">Reset trận — Xoá boss/clone, hồi vị trí, sinh map mới.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>F</kbd></div>
+            <div class="desc">Fast reload — Tăng tốc hồi đạn cho cả hai trong phiên hiện tại.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>N</kbd></div>
+            <div class="desc">Toggle No Walls — Bật/tắt va chạm và hiển thị tường.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>G</kbd></div>
+            <div class="desc">Toggle Bất tử — Bật/tắt miễn sát thương cho hai người chơi.</div>
+        </div>
+        <div class="row">
+            <div class="key"><kbd>M</kbd></div>
+            <div class="desc">Toggle 1 Hit Kill — Đạn gây 999999 damage (tức chết luôn).</div>
+        </div>
+    </div>
+</section>
+</div>
+
+<!-- Instructions Panel at bottom -->
+<section id="instructionsPanel" class="card bottom-panel hidden" aria-label="Hướng dẫn">
+    <button class="settings-close-x" id="instructionsCloseX">×</button>
+    <div class="settings-header">
+        <h4>Hướng dẫn chơi</h4>
+        <p>Cách điều khiển và mẹo chơi game.</p>
+    </div>
+    <div class="settings-grid">
+        <div class="settings-group">
+            <div class="settings-title">Player 1</div>
+            <ul style="margin:0;padding-left:20px;color:#c9d5ef;">
+                <li><span>Tiến / Lùi</span> <kbd>W</kbd> · <kbd>S</kbd></li>
+                <li><span>Quay trái / phải</span> <kbd>A</kbd> · <kbd>D</kbd></li>
+                <li><span>Bắn</span> <kbd>Space</kbd></li>
+            </ul>
+        </div>
+        <div class="settings-group">
+            <div class="settings-title">Player 2</div>
+            <ul style="margin:0;padding-left:20px;color:#c9d5ef;">
+                <li><span>Tiến / Lùi</span> <kbd>↑</kbd> · <kbd>↓</kbd></li>
+                <li><span>Quay trái / phải</span> <kbd>←</kbd> · <kbd>→</kbd></li>
+                <li><span>Bắn</span> <kbd>Enter</kbd></li>
+            </ul>
+        </div>
+        <div class="settings-group">
+            <div class="settings-title">Mẹo chơi</div>
+            <ul style="margin:0;padding-left:20px;color:#c9d5ef;">
+                <li>Đạn nảy tối đa 6 lần trừ khi buff thay đổi.</li>
+                <li>Tường và biên đều phản xạ đạn — cẩn thận tự bắn mình.</li>
+                <li>Giữ phím bắn để tích năng lượng đạn mạnh hơn.</li>
+            </ul>
+        </div>
+    </div>
+</section>
+<!-- Game UI Info -->
+<div id="gameInfo" style="position: absolute; top: 10px; left: 10px; color: #fff; font-size: 14px; pointer-events: none; background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 8px;">
+    <div id="gameModeInfo">Mode: Player vs Player</div>
+    <div id="floorInfo" style="display: none;">Floor: 1</div>
+    <div id="permanentBuffsInfo" style="display: none; margin-top: 5px; font-size: 12px; color: #ffd700;">Buffs: None</div>
+</div>
+
+<!-- Boss Mode Buff Selection Overlay -->
+<div id="buffSelectionOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 2000; justify-content: center; align-items: center;">
+    <div class="card" style="padding: 30px; text-align: center; max-width: 600px;">
+        <h2 style="margin-bottom: 20px; color: #ffd700;">Choose Your Permanent Buff</h2>
+        <p style="margin-bottom: 30px; color: #ccc;">This buff will last for the rest of your Boss Mode run!</p>
+        <div id="buffOptions" style="display: flex; gap: 20px; justify-content: center;">
+            <!-- Buff options will be populated by JavaScript -->
+        </div>
+        <div style="margin-top: 20px; font-size: 14px; color: #888;">
+            <p>Press 1, 2, or 3 to select a buff</p>
+        </div>
+    </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+
+</body>
+</html>
