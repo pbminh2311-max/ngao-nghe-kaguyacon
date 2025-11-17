@@ -2,6 +2,25 @@ export const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 export const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 export const normalizeAngle=angle=>Math.atan2(Math.sin(angle),Math.cos(angle));
 
+export function getBossBuffName(buffType) {
+    const names = {
+        lifeSteal: '🧛 Hút Máu',
+        bounceShot: '↺ Nảy Đa Hồi',
+        bounceShot2: '↺↺ Nảy Đa Hồi II',
+        bossPierce: '⤫ Xuyên Thấu',
+        bossPierce2: '⤫⤫ Xuyên Thấu II',
+        bossFireRate: '⚡ Tốc Độ Bắn',
+        bossMoveSpeed: '🏃 Tốc Độ Di Chuyển',
+        twinShot: '✦ Song Đạn',
+        magnetSmall: '🧲 Hút Nhỏ',
+        shotSplit: '⚛️ Phân Tách Đạn',
+        bossShield: '🛡️ Khiên Bảo Hộ',
+        slowMotion10: '🐢 Làm Chậm 10%',
+        fireIceShot: '🔥❄️ Đạn Hỏa/Băng'
+    };
+    return names[buffType] || buffType;
+}
+
 export function roundRect(ctx,x,y,w,h,r,fill,stroke){
     ctx.beginPath(); ctx.moveTo(x+r,y);
     ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);

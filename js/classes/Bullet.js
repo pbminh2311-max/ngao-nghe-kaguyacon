@@ -1,10 +1,10 @@
-
 import { BUFF_COLORS } from '../constants.js';
 import { normalizeAngle, clamp } from '../utils.js';
 import { W, H } from '../canvas.js';
 import { obstacles } from '../game/obstacles.js';
 import { addExplosion, addTrail } from '../rendering/animations.js';
 import { updateBulletPhysics } from '../game/physics.js';
+
 import { HOMING_MAX_TURN } from '../config.js';
 import { devOneHitKill, devMode, p1, p2, tanks, devNoWalls } from '../state.js';
 import { pickHomingTarget, findCollisionPoint, lineRectColl } from '../game/collision.js';
@@ -15,8 +15,8 @@ class Bullet{
         this.x=x; this.y=y; this.r=4; this.owner=owner;
         this.bounces=0; this.maxBounces=8; this.alive=true;
         let speed=6.5;
-        
-        // Apply bullet speed multiplier if owner has it
+        this.baseSpeed = speed;
+
         if (owner && owner.bulletSpeedMultiplier) {
             speed *= owner.bulletSpeedMultiplier;
         }
@@ -47,6 +47,11 @@ class Bullet{
         this.lastTrailX = x;
         this.lastTrailY = y;
         this.trailInterval = 0;
+        this.hasShotSplit = false;
+        this._shotSplitConsumed = false;
+        this._fromShotSplit = false;
+        this._shotSplitSpawned = false;
+
     }
     // Trong class Bullet: thay thế update() và bounce(o)
     // Đây là đoạn code mới
@@ -103,6 +108,7 @@ class Bullet{
     if(this.isTrail){
         this.trailInterval += Math.hypot(this.vx, this.vy);
         if(this.trailInterval >= 8){
+
             const newX = this.x + this.vx;
             const newY = this.y + this.vy;
             const dist = Math.hypot(newX - this.lastTrailX, newY - this.lastTrailY);

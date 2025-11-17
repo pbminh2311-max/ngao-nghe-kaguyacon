@@ -151,21 +151,6 @@ export function groundSlamAttack(boss, target, now) {
             }, 1000); // Stun for 1 second
             showStatus(player, '⚡ CHOÁNG!', '#fbbf24', 1000); // Show status for 1 second
 
-            // Apply damage only if not in god mode
-            if (!skipDamage) {
-                player.hp = Math.max(0, player.hp - 3);
-                showStatus(player, '-3 HP', '#ef4444', 1500);
-                for (let j = 0; j < 3; j++) {
-                    addExplosion({
-                        x: player.x, y: player.y,
-                        startTime: now + j * 200,
-                        duration: 600,
-                        color: '#fbbf24',
-                        radius: 15 + j * 5,
-                        isWave: true
-                    });
-                }
-            }
         }
     });
     flashMsg('🗿 Golem đấm đất - Choáng toàn bản đồ 1s!');

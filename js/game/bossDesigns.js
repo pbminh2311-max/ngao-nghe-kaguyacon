@@ -200,154 +200,296 @@ function drawRock(ctx, x, y, r, color1, color2) {
 function drawWitchBody(ctx, boss) {
     const time = performance.now() * 0.001;
     const r = boss.r;
-    const hover = Math.sin(time * 2) * 3;
+    const hover = Math.sin(time * 2) * 2.5;
 
-    // Draw robe
-    const robeGradient = ctx.createLinearGradient(0, -r, 0, r);
-    robeGradient.addColorStop(0, '#4c1d95');
-    robeGradient.addColorStop(0.5, '#3730a3');
-    robeGradient.addColorStop(1, '#1e1b4b');
-    ctx.fillStyle = robeGradient;
-    ctx.beginPath();
-    ctx.moveTo(0, -r * 1.2 + hover); // Hood tip
-    ctx.bezierCurveTo(-r * 1.5, -r * 0.5 + hover, -r * 1.2, r * 1.2 + hover, 0, r * 1.4 + hover);
-    ctx.bezierCurveTo(r * 1.2, r * 1.2 + hover, r * 1.5, -r * 0.5 + hover, 0, -r * 1.2 + hover);
-    ctx.closePath();
-    ctx.fill();
-
-    // Draw hood opening (shadow)
-    ctx.fillStyle = '#1e1b4b';
-    ctx.beginPath();
-    ctx.ellipse(0, -r * 0.3 + hover, r * 0.6, r * 0.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Draw glowing eyes
     ctx.save();
-    ctx.fillStyle = '#c084fc';
-    ctx.shadowColor = '#a855f7';
-    ctx.shadowBlur = 12;
-    const eyeY = -r * 0.3 + hover;
+
+    // Radial aura beneath the witch (top-down symmetry)
+    ctx.save();
+    const auraPulse = 0.35 + 0.15 * Math.sin(time * 3.6);
+    const auraGradient = ctx.createRadialGradient(0, r * 1.05 + hover, 0, 0, r * 1.05 + hover, r * 1.7);
+    auraGradient.addColorStop(0, 'rgba(192, 132, 252, 0.4)');
+    auraGradient.addColorStop(0.55, 'rgba(147, 51, 234, 0.18)');
+    auraGradient.addColorStop(1, 'rgba(59, 7, 100, 0)');
+    ctx.globalAlpha = auraPulse;
     ctx.beginPath();
-    ctx.arc(-r * 0.2, eyeY, 3, 0, Math.PI * 2);
-    ctx.arc(r * 0.2, eyeY, 3, 0, Math.PI * 2);
+    ctx.ellipse(0, r * 1.05 + hover, r * 1.6, r * 0.55, 0, 0, Math.PI * 2);
+    ctx.fillStyle = auraGradient;
     ctx.fill();
     ctx.restore();
 
-    // Floating runes
-    ctx.font = '12px "Times New Roman"';
-    ctx.fillStyle = 'rgba(192, 132, 252, 0.7)';
-    const runes = ['✧', '✦', '⬩', '⬨'];
-    for (let i = 0; i < runes.length; i++) {
-        const angle = time * 0.5 + (i / runes.length) * Math.PI * 2;
-        const radius = r * 1.4 + Math.sin(time * 2 + i) * 5;
-        const x = Math.cos(angle) * radius;
-        const y = Math.sin(angle) * radius + hover;
-        ctx.fillText(runes[i], x, y);
+    // Outer magical veil (circular so rotation looks identical)
+    const veilGradient = ctx.createRadialGradient(0, hover * 0.1, r * 0.3, 0, hover * 0.1, r * 1.05);
+    veilGradient.addColorStop(0, 'rgba(238, 242, 255, 0.85)');
+    veilGradient.addColorStop(0.4, 'rgba(196, 181, 253, 0.55)');
+    veilGradient.addColorStop(1, 'rgba(99, 102, 241, 0.05)');
+    ctx.fillStyle = veilGradient;
+    ctx.beginPath();
+    ctx.arc(0, hover * 0.1, r * 1.05, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Concentric energy rings
+    ctx.strokeStyle = 'rgba(165, 180, 252, 0.45)';
+    ctx.lineWidth = 2;
+    for (let i = 1; i <= 3; i++) {
+        const ringRadius = r * (0.45 + i * 0.2 + Math.sin(time * 1.5 + i) * 0.03);
+        ctx.globalAlpha = 0.6 - i * 0.1;
+        ctx.beginPath();
+        ctx.arc(0, hover * 0.1, ringRadius, 0, Math.PI * 2);
+        ctx.stroke();
     }
+    ctx.globalAlpha = 1;
+
+    // Rotationally symmetric swirl arms
+    ctx.save();
+    ctx.strokeStyle = 'rgba(167, 139, 250, 0.6)';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 6; i++) {
+        const spin = time * 1.2;
+        const angle = spin + (i / 6) * Math.PI * 2;
+        const inner = r * 0.25;
+        const outer = r * 0.95;
+        const cx = Math.cos(angle) * inner;
+        const cy = Math.sin(angle) * inner + hover * 0.1;
+        const tx = Math.cos(angle) * outer;
+        const ty = Math.sin(angle) * outer + hover * 0.1;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.quadraticCurveTo(
+            Math.cos(angle + Math.PI / 6) * outer * 0.6,
+            Math.sin(angle + Math.PI / 6) * outer * 0.6 + hover * 0.1,
+            tx,
+            ty
+        );
+        ctx.stroke();
+    }
+    ctx.restore();
+
+    // Core orb body
+    const coreGradient = ctx.createRadialGradient(0, hover * 0.05, r * 0.1, 0, hover * 0.05, r * 0.55);
+    coreGradient.addColorStop(0, '#f5d0fe');
+    coreGradient.addColorStop(0.4, '#d8b4fe');
+    coreGradient.addColorStop(1, '#7c3aed');
+    ctx.fillStyle = coreGradient;
+    ctx.beginPath();
+    ctx.arc(0, hover * 0.05, r * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Floating sigil ring
+    ctx.save();
+    ctx.font = `${Math.round(r * 0.45)}px "Times New Roman"`;
+    const runes = ['✧', '✦', '⬩', '❂', '✶', '⟡'];
+    for (let i = 0; i < runes.length; i++) {
+        const angle = time * 0.7 + (i / runes.length) * Math.PI * 2;
+        const radius = r * 1.05;
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius + hover * 0.1;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle + time * 0.4);
+        ctx.fillStyle = `rgba(224, 231, 255, ${0.45 + 0.25 * Math.sin(time * 3 + i)})`;
+        ctx.fillText(runes[i], 0, 0);
+        ctx.restore();
+    }
+    ctx.restore();
+
+    // Inner eye that stays centred regardless rotation
+    const blink = 0.5 + 0.5 * Math.abs(Math.sin(time * 2.8));
+    ctx.fillStyle = 'rgba(240, 171, 252, 0.9)';
+    ctx.shadowColor = '#f0abfc';
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    ctx.ellipse(0, hover * 0.05, r * 0.22, r * 0.22 * blink, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.restore();
 }
 
 function drawTreantBody(ctx, boss) {
     const time = performance.now() * 0.001;
     const r = boss.r;
-    const hover = Math.sin(time * 1.5) * 2;
+    const hover = Math.sin(time * 1.35) * 2.3;
 
-    // Main trunk
-    const trunkGradient = ctx.createLinearGradient(0, -r, 0, r * 1.5);
-    trunkGradient.addColorStop(0, '#5f4339'); // Dark brown top
-    trunkGradient.addColorStop(0.5, '#8c6d53'); // Lighter brown middle
-    trunkGradient.addColorStop(1, '#4a3f35'); // Dark root color
-    ctx.fillStyle = trunkGradient;
-    
-    ctx.beginPath();
-    ctx.moveTo(0, r * 1.5 + hover);
-    ctx.bezierCurveTo(-r * 1.2, r + hover, -r, -r * 0.5 + hover, 0, -r * 1.2 + hover);
-    ctx.bezierCurveTo(r, -r * 0.5 + hover, r * 1.2, r + hover, 0, r * 1.5 + hover);
-    ctx.closePath();
-    ctx.fill();
-
-    // Bark texture
-    ctx.strokeStyle = 'rgba(40, 30, 20, 0.5)';
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 5; i++) {
-        ctx.beginPath();
-        ctx.moveTo(Math.random() * r - r/2, -r);
-        ctx.bezierCurveTo(
-            Math.random() * r - r/2, -r/2,
-            Math.random() * r - r/2, r/2,
-            Math.random() * r - r/2, r * 1.2
-        );
-        ctx.stroke();
-    }
-
-    // Glowing core (eye)
-    const coreColor = boss.isHealing ? '#4ade80' : '#22c55e';
     ctx.save();
-    ctx.fillStyle = coreColor;
-    ctx.shadowColor = coreColor;
-    ctx.shadowBlur = boss.isHealing ? 20 : 10;
+
+    // Ground bloom
+    ctx.save();
+    const groundPulse = 0.36 + 0.12 * Math.sin(time * 2.4);
+    const groundGradient = ctx.createRadialGradient(0, r * 1.25 + hover, 0, 0, r * 1.25 + hover, r * 2.0);
+    groundGradient.addColorStop(0, 'rgba(134, 239, 172, 0.42)');
+    groundGradient.addColorStop(0.6, 'rgba(74, 222, 128, 0.22)');
+    groundGradient.addColorStop(1, 'rgba(21, 128, 61, 0)');
+    ctx.globalAlpha = groundPulse;
     ctx.beginPath();
-    ctx.arc(0, hover, 8, 0, Math.PI * 2);
+    ctx.ellipse(0, r * 1.25 + hover, r * 1.9, r * 0.65, 0, 0, Math.PI * 2);
+    ctx.fillStyle = groundGradient;
     ctx.fill();
     ctx.restore();
 
-    // Leafy crown
-    const leafColors = ['#16a34a', '#22c55e', '#4ade80'];
-    for (let i = 0; i < 12; i++) {
-        const angle = (i / 12) * Math.PI * 2;
-        const sway = Math.sin(time * 2 + i) * 0.2;
-        const leafAngle = angle + sway;
-        const leafDist = r * 0.8 + Math.cos(time + i) * 5;
-        
-        ctx.save();
-        ctx.fillStyle = leafColors[i % 3];
-        ctx.translate(Math.cos(leafAngle) * leafDist, Math.sin(leafAngle) * leafDist - r * 0.5 + hover);
-        ctx.rotate(leafAngle + Math.PI / 2);
+    // Root petals (6-fold symmetry)
+    ctx.save();
+    ctx.fillStyle = 'rgba(30, 64, 36, 0.45)';
+    for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2 + time * 0.25;
         ctx.beginPath();
-        ctx.ellipse(0, 0, 5, 12, 0, 0, Math.PI * 2);
+        ctx.moveTo(0, r * 0.55 + hover * 0.1);
+        ctx.quadraticCurveTo(
+            Math.cos(angle) * r * 0.85,
+            Math.sin(angle) * r * 0.85 + hover * 0.1,
+            Math.cos(angle) * r * 1.2,
+            Math.sin(angle) * r * 1.2 + r * 0.75
+        );
+        ctx.quadraticCurveTo(0, r * 1.05 + hover * 0.05, 0, r * 0.55 + hover * 0.1);
+        ctx.closePath();
         ctx.fill();
-        ctx.restore();
     }
-}
+    ctx.restore();
 
-function drawNormalBossBody(ctx, boss) {
-    ctx.shadowColor = '#ef4444';
-    ctx.shadowBlur = 20;
-
-    const gradient = ctx.createLinearGradient(-boss.r, -boss.r, boss.r, boss.r);
-    gradient.addColorStop(0, '#dc2626');
-    gradient.addColorStop(0.3, '#b91c1c');
-    gradient.addColorStop(0.7, '#991b1b');
-    gradient.addColorStop(1, '#7f1d1d');
-    ctx.fillStyle = gradient;
-    roundRect(ctx, -boss.r, -boss.r, boss.r*2, boss.r*2, 12, true, false);
-
-    ctx.strokeStyle = '#fca5a5';
-    ctx.lineWidth = 2;
-    ctx.shadowBlur = 5;
-
-    for(let i = -1; i <= 1; i++) {
-        ctx.beginPath();
-        ctx.moveTo(-boss.r + 10, i * boss.r/3);
-        ctx.lineTo(boss.r - 10, i * boss.r/3);
-        ctx.stroke();
-    }
-    for(let i = -1; i <= 1; i++) {
-        ctx.beginPath();
-        ctx.moveTo(i * boss.r/3, -boss.r + 10);
-        ctx.lineTo(i * boss.r/3, boss.r - 10);
-        ctx.stroke();
-    }
-
-    ctx.fillStyle = '#fca5a5';
-    ctx.shadowBlur = 15;
+    // Trunk disk
+    const trunkGradient = ctx.createRadialGradient(0, hover * 0.05, r * 0.15, 0, hover * 0.05, r * 0.96);
+    trunkGradient.addColorStop(0, '#815f3f');
+    trunkGradient.addColorStop(0.45, '#5f4431');
+    trunkGradient.addColorStop(1, '#2b211b');
+    ctx.fillStyle = trunkGradient;
     ctx.beginPath();
-    ctx.arc(0, 0, 8, 0, Math.PI * 2);
+    ctx.arc(0, hover * 0.05, r * 0.98, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowBlur = 0;
 
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 3;
-    roundRect(ctx, -boss.r, -boss.r, boss.r*2, boss.r*2, 12, false, true);
+    // Growth rings
+    ctx.save();
+    ctx.strokeStyle = 'rgba(25, 19, 15, 0.2)';
+    ctx.setLineDash([6, 5]);
+    ctx.lineDashOffset = -time * 10;
+    for (let i = 1; i <= 4; i++) {
+        ctx.lineWidth = i === 4 ? 2 : 1.4;
+        ctx.beginPath();
+        ctx.arc(0, hover * 0.05, r * (0.25 + i * 0.15), 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    ctx.restore();
+
+    // Bark fissures
+    ctx.save();
+    ctx.strokeStyle = 'rgba(12, 10, 8, 0.38)';
+    ctx.lineWidth = 2.3;
+    ctx.lineCap = 'round';
+    const fissures = 8;
+    for (let i = 0; i < fissures; i++) {
+        const angle = (i / fissures) * Math.PI * 2 + Math.sin(time * 0.8 + i) * 0.1;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle) * r * 0.18, Math.sin(angle) * r * 0.18 + hover * 0.05);
+        ctx.quadraticCurveTo(
+            Math.cos(angle) * r * 0.55,
+            Math.sin(angle) * r * 0.55 + hover * 0.04 + Math.sin(time * 1.6 + i) * 5,
+            Math.cos(angle) * r * 0.88,
+            Math.sin(angle) * r * 0.88 + hover * 0.05
+        );
+        ctx.stroke();
+    }
+    ctx.restore();
+
+    // Luminous sap veins
+    ctx.save();
+    ctx.strokeStyle = boss.isHealing ? 'rgba(74, 222, 128, 0.75)' : 'rgba(34, 197, 94, 0.55)';
+    ctx.lineWidth = 2.8;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 4; i++) {
+        const baseAngle = (i / 4) * Math.PI * 2 + time * 0.35;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(baseAngle) * r * 0.1, Math.sin(baseAngle) * r * 0.1 + hover * 0.05);
+        ctx.quadraticCurveTo(
+            Math.cos(baseAngle + 0.4) * r * 0.45,
+            Math.sin(baseAngle + 0.4) * r * 0.45 + hover * 0.07,
+            Math.cos(baseAngle + 0.2) * r * 0.75,
+            Math.sin(baseAngle + 0.2) * r * 0.75 + hover * 0.05
+        );
+        ctx.stroke();
+    }
+    ctx.restore();
+
+    // Heartwood core
+    const coreColor = boss.isHealing ? '#4ade80' : '#22c55e';
+    const pulse = 0.85 + 0.18 * Math.sin(time * 4.5);
+    ctx.save();
+    ctx.fillStyle = coreColor;
+    ctx.shadowColor = coreColor;
+    ctx.shadowBlur = boss.isHealing ? 26 : 16;
+    ctx.beginPath();
+    ctx.arc(0, hover * 0.05, r * 0.36 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Protective bark ring
+    ctx.save();
+    ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
+    ctx.lineWidth = 3.1;
+    ctx.setLineDash([8, 6]);
+    ctx.lineDashOffset = time * -12;
+    ctx.beginPath();
+    ctx.arc(0, hover * 0.05, r * 0.7, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    // Mushroom ring accents
+    ctx.save();
+    const mushroomColors = ['#f97316', '#fb923c'];
+    for (let i = 0; i < 8; i++) {
+        const angle = time * 0.5 + (i / 8) * Math.PI * 2;
+        const radius = r * 1.05;
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius + hover * 0.08;
+        ctx.fillStyle = mushroomColors[i % mushroomColors.length];
+        ctx.beginPath();
+        ctx.ellipse(x, y, r * 0.18, r * 0.1, angle, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fde68a';
+        ctx.beginPath();
+        ctx.arc(x, y - r * 0.02, r * 0.06, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.restore();
+
+    // Leaf halos
+    ctx.save();
+    const leafBands = [1.3, 1.6];
+    for (let band = 0; band < leafBands.length; band++) {
+        const radius = r * leafBands[band];
+        const sizeMul = band === 0 ? 0.22 : 0.3;
+        const speed = band === 0 ? 0.45 : -0.4;
+        const color = band === 0 ? '#22c55e' : '#16a34a';
+        for (let i = 0; i < 16; i++) {
+            const angle = time * speed + (i / 16) * Math.PI * 2;
+            ctx.save();
+            ctx.translate(Math.cos(angle) * radius, Math.sin(angle) * radius + hover * 0.12 * (band + 1));
+            ctx.rotate(angle + Math.PI / 2);
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, r * sizeMul, r * sizeMul * 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+    ctx.restore();
+
+    // Floating spores
+    ctx.save();
+    ctx.fillStyle = 'rgba(187, 247, 208, 0.8)';
+    for (let i = 0; i < 12; i++) {
+        const angle = time * 0.45 + (i / 12) * Math.PI * 2;
+        const radius = r * 1.55 + Math.sin(time * 1.6 + i) * 5;
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius + hover * 0.25;
+        ctx.globalAlpha = 0.55 + 0.25 * Math.sin(time * 3 + i);
+        ctx.beginPath();
+        ctx.arc(x, y, 2.7, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    ctx.restore();
 }
 
 export function drawBossWeapon(ctx, boss) {

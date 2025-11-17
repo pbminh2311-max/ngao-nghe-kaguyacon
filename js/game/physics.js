@@ -2,9 +2,10 @@ import { W, H } from '../canvas.js';
 import { clamp, dist } from '../utils.js';
 import { circleRectColl, findCollisionPoint, lineRectColl } from './collision.js';
 import { obstacles } from './obstacles.js';
-import { devNoWalls, tanks, gameMode, boss, p1, p2, p1FocusMode, p2FocusMode } from '../state.js';
+import { devNoWalls, tanks, gameMode, boss, p1, p2, p1FocusMode, p2FocusMode, enemySlowFactor } from '../state.js';
 import { flashMsg } from '../main.js';
 import { addExplosion } from '../rendering/animations.js';
+import { spawnShotSplitChildren } from '../utils/shotSplit.js';
 
 function collidesAt(px, py, r) {
     if (devNoWalls) return false;
@@ -26,6 +27,7 @@ export function updateTankPhysics(tank, dt, input) {
 
     const focusMode = (tank === p1 && p1FocusMode) || (tank === p2 && p2FocusMode);
     const isRooted = !!tank.rooted;
+    const slowFactor = typeof tank.bossIceSlowFactor === 'number' ? tank.bossIceSlowFactor : 1;
 
     if (focusMode) {
         // --- FOCUS MODE LOGIC ---
@@ -44,35 +46,28 @@ export function updateTankPhysics(tank, dt, input) {
 
         // 2. Movement (Forward/Backward + Strafing)
         if (!isRooted) {
-            let forwardSpeed = 0;
-            if (input[tank.controls.forward]) forwardSpeed += tank.moveSpeed;
-            if (input[tank.controls.back]) forwardSpeed -= tank.moveSpeed;
+            let moveX = 0;
+            let moveY = 0;
+            if (input[tank.controls.forward]) moveY -= 1;
+            if (input[tank.controls.back]) moveY += 1;
+            if (input[tank.controls.left]) moveX -= 1;
+            if (input[tank.controls.right]) moveX += 1;
 
-            let strafeSpeed = 0;
-            if (tank === p1) {
-                // Đảo ngược điều khiển di chuyển ngang cho P1
-                if (input[tank.controls.right]) strafeSpeed -= tank.moveSpeed * 0.8; // D -> di chuyển sang trái
-                if (input[tank.controls.left]) strafeSpeed += tank.moveSpeed * 0.8;  // A -> di chuyển sang phải
-            } else {
-                if (input[tank.controls.right]) strafeSpeed += tank.moveSpeed * 0.8;
-                if (input[tank.controls.left]) strafeSpeed -= tank.moveSpeed * 0.8;
+            // Normalize diagonal movement to prevent faster speed
+            const magnitude = Math.hypot(moveX, moveY);
+            if (magnitude > 1) {
+                moveX /= magnitude;
+                moveY /= magnitude;
             }
-
-            // Combine speeds using vectors
-            const forwardAngle = tank.angle;
-            const strafeAngle = tank.angle + Math.PI / 2;
-
-            const totalMoveX = (Math.cos(forwardAngle) * forwardSpeed) + (Math.cos(strafeAngle) * strafeSpeed);
-            const totalMoveY = (Math.sin(forwardAngle) * forwardSpeed) + (Math.sin(strafeAngle) * strafeSpeed);
             
             // Apply movement with friction
-            tank.vx = (tank.vx * tank.friction) + (totalMoveX * dt / 16);
-            tank.vy = (tank.vy * tank.friction) + (totalMoveY * dt / 16);
+            const effectiveMoveSpeed = tank.moveSpeed * slowFactor;
+            tank.vx = (tank.vx * tank.friction) + (moveX * effectiveMoveSpeed * dt / 16);
+            tank.vy = (tank.vy * tank.friction) + (moveY * effectiveMoveSpeed * dt / 16);
 
             const targetX = clamp(tank.x + tank.vx, tank.r + 4, W - tank.r - 4);
             const targetY = clamp(tank.y + tank.vy, tank.r + 4, H - tank.r - 4);
 
-            // Simplified collision for strafing
             if (devNoWalls || !collidesAt(targetX, targetY, tank.r)) {
                 tank.x = targetX;
                 tank.y = targetY;
@@ -106,13 +101,13 @@ export function updateTankPhysics(tank, dt, input) {
             if (tank.possession) {
                 // Chaotic movement
                 if (Math.random() < 0.3) {
-                    tank.speed += tank.moveSpeed * dt / 16;
+                    tank.speed += tank.moveSpeed * slowFactor * dt / 16;
                 } else if (Math.random() < 0.5) {
-                    tank.speed -= tank.moveSpeed * dt / 16;
+                    tank.speed -= tank.moveSpeed * slowFactor * dt / 16;
                 }
             } else {
-                if (input[tank.controls.forward]) tank.speed += tank.moveSpeed * dt / 16;
-                if (input[tank.controls.back]) tank.speed -= tank.moveSpeed * dt / 16;
+                if (input[tank.controls.forward]) tank.speed += tank.moveSpeed * slowFactor * dt / 16;
+                if (input[tank.controls.back]) tank.speed -= tank.moveSpeed * slowFactor * dt / 16;
             }
             tank.speed *= tank.friction;
 
@@ -195,11 +190,28 @@ function bounceBullet(bullet, wall) {
     bullet.y += (bullet.vy / sp) * 0.5;
 
     bullet.bounces++;
+
+    if (bullet.bossBounceDamageFactor) {
+        const factor = bullet.bossBounceDamageFactor;
+        bullet.damage = Math.max(0.1, (bullet.damage || 1) * factor);
+        if (typeof bullet.bossBounceRemaining === 'number') {
+            bullet.bossBounceRemaining--;
+            if (bullet.bossBounceRemaining <= 0) {
+                delete bullet.bossBounceRemaining;
+                delete bullet.bossBounceDamageFactor;
+            }
+        }
+    }
 }
 
 export function updateBulletPhysics(bullet) {
-    const newX = bullet.x + bullet.vx;
-    const newY = bullet.y + bullet.vy;
+    const owner = bullet.owner;
+    const isEnemyBullet = owner && owner !== p1 && owner !== p2;
+    const slowFactor = isEnemyBullet ? (enemySlowFactor || 1) : 1;
+    const stepVx = bullet.vx * slowFactor;
+    const stepVy = bullet.vy * slowFactor;
+    const newX = bullet.x + stepVx;
+    const newY = bullet.y + stepVy;
 
     // --- Xử lý đạn nổ ---
     if (bullet.isExplosive) {
@@ -222,10 +234,10 @@ export function updateBulletPhysics(bullet) {
             (bullet.prevY >= bullet.r && newY < bullet.r) || (bullet.prevY <= H - bullet.r && newY > H - bullet.r)) {
             hitBoundaryExplosive = true;
             let explosiveBoundaryT = 1;
-            if (bullet.vx < 0 && bullet.prevX > bullet.r && newX < bullet.r) explosiveBoundaryT = (bullet.r - bullet.prevX) / bullet.vx;
-            else if (bullet.vx > 0 && bullet.prevX < W - bullet.r && newX > W - bullet.r) explosiveBoundaryT = (W - bullet.r - bullet.prevX) / bullet.vx;
-            else if (bullet.vy < 0 && bullet.prevY > bullet.r && newY < bullet.r) explosiveBoundaryT = (bullet.r - bullet.prevY) / bullet.vy;
-            else if (bullet.vy > 0 && bullet.prevY < H - bullet.r && newY > H - bullet.r) explosiveBoundaryT = (H - bullet.r - bullet.prevY) / bullet.vy;
+            if (stepVx < 0 && bullet.prevX > bullet.r && newX < bullet.r) explosiveBoundaryT = (bullet.r - bullet.prevX) / stepVx;
+            else if (stepVx > 0 && bullet.prevX < W - bullet.r && newX > W - bullet.r) explosiveBoundaryT = (W - bullet.r - bullet.prevX) / stepVx;
+            else if (stepVy < 0 && bullet.prevY > bullet.r && newY < bullet.r) explosiveBoundaryT = (bullet.r - bullet.prevY) / stepVy;
+            else if (stepVy > 0 && bullet.prevY < H - bullet.r && newY > H - bullet.r) explosiveBoundaryT = (H - bullet.r - bullet.prevY) / stepVy;
             bullet.x = bullet.prevX + bullet.vx * explosiveBoundaryT;
             bullet.y = bullet.prevY + bullet.vy * explosiveBoundaryT;
         }
@@ -245,17 +257,17 @@ export function updateBulletPhysics(bullet) {
         }
     }
 
-    // --- Xử lý va chạm cho đạn thường/nảy ---
     let hitWall = null;
     let hitPoint = null;
     let minT = 1;
 
-    if (!bullet.isPiercing && !devNoWalls) {
+    if (!devNoWalls) { // Luôn kiểm tra va chạm tường
         for (const o of obstacles) {
             const t = findCollisionPoint(bullet.prevX, bullet.prevY, newX, newY, o, bullet.r);
             if (t !== null && t < minT) {
                 minT = t;
                 hitWall = o;
+
                 hitPoint = { x: bullet.prevX + (newX - bullet.prevX) * t, y: bullet.prevY + (newY - bullet.prevY) * t };
             }
         }
@@ -263,15 +275,35 @@ export function updateBulletPhysics(bullet) {
 
     let hitBoundary = false;
     let boundaryT = 1;
-    if (bullet.vx < 0 && bullet.prevX > bullet.r && newX < bullet.r) { const t = (bullet.r - bullet.prevX) / bullet.vx; if (t < boundaryT) { boundaryT = t; hitBoundary = true; } }
-    if (bullet.vx > 0 && bullet.prevX < W - bullet.r && newX >= W - bullet.r) { const t = (W - bullet.r - bullet.prevX) / bullet.vx; if (t < boundaryT) { boundaryT = t; hitBoundary = true; } }
-    if (bullet.vy < 0 && bullet.prevY > bullet.r && newY < bullet.r) { const t = (bullet.r - bullet.prevY) / bullet.vy; if (t < boundaryT) { boundaryT = t; hitBoundary = true; } }
-    if (bullet.vy > 0 && bullet.prevY < H - bullet.r && newY >= H - bullet.r) { const t = (H - bullet.r - bullet.prevY) / bullet.vy; if (t < boundaryT) { boundaryT = t; hitBoundary = true; } }
+    if (stepVx < 0 && bullet.prevX > bullet.r && newX < bullet.r) { const t = (bullet.r - bullet.prevX) / stepVx; if (t < boundaryT) { boundaryT = t; hitBoundary = true; } }
+    if (stepVx > 0 && bullet.prevX < W - bullet.r && newX >= W - bullet.r) { const t = (W - bullet.r - bullet.prevX) / stepVx; if (t < boundaryT) { boundaryT = t; hitBoundary = true; } }
+    if (stepVy < 0 && bullet.prevY > bullet.r && newY < bullet.r) { const t = (bullet.r - bullet.prevY) / stepVy; if (t < boundaryT) { boundaryT = t; hitBoundary = true; } }
+    if (stepVy > 0 && bullet.prevY < H - bullet.r && newY >= H - bullet.r) { const t = (H - bullet.r - bullet.prevY) / stepVy; if (t < boundaryT) { boundaryT = t; hitBoundary = true; } }
 
-    if (!bullet.isPiercing && hitWall && minT < boundaryT) {
+    if (hitWall && minT < boundaryT) { // Đã va vào tường
+        // Xử lý xuyên tường cho buff của boss
+        if (bullet.isPiercing && typeof bullet.bossPierceRemaining === 'number' && bullet.bossPierceRemaining > 1) {
+            if (bullet.hasShotSplit && !bullet._shotSplitConsumed) {
+                spawnShotSplitChildren(bullet);
+                bullet.alive = false;
+                return;
+            }
+            bullet.bossPierceRemaining = 1; // Tiêu thụ lượt xuyên
+            bullet.isPiercing = false; // Ngừng xuyên sau khi trúng tường
+            bullet.bossPierceExhausted = true;
+            bullet.x = newX; // Tiếp tục bay
+            bullet.y = newY;
+            return; // Bỏ qua logic nảy/phá hủy
+        }
+
         bullet.x = hitPoint.x;
         bullet.y = hitPoint.y;
         bounceBullet(bullet, hitWall);
+        if (bullet.hasShotSplit && !bullet._shotSplitConsumed) {
+            spawnShotSplitChildren(bullet);
+            bullet.alive = false;
+            return;
+        }
         let remainingT = Math.max(0, (1 - minT) - 0.02);
         if (remainingT > 0.005) {
             bullet.x += bullet.vx * remainingT;
@@ -281,6 +313,11 @@ export function updateBulletPhysics(bullet) {
         bullet.x = bullet.prevX + (newX - bullet.prevX) * boundaryT;
         bullet.y = bullet.prevY + (newY - bullet.prevY) * boundaryT;
         bounceBullet(bullet);
+        if (bullet.hasShotSplit && !bullet._shotSplitConsumed) {
+            spawnShotSplitChildren(bullet);
+            bullet.alive = false;
+            return;
+        }
         let remainingT = Math.max(0, (1 - boundaryT) - 0.02);
         if (remainingT > 0.005) {
             bullet.x += bullet.vx * remainingT;
@@ -293,6 +330,11 @@ export function updateBulletPhysics(bullet) {
         bullet.y = newY;
         if (bullet.x < bullet.r || bullet.x > W - bullet.r || bullet.y < bullet.r || bullet.y > H - bullet.r) {
             bounceBullet(bullet);
+            if (bullet.hasShotSplit && !bullet._shotSplitConsumed) {
+                spawnShotSplitChildren(bullet);
+                bullet.alive = false;
+                return;
+            }
             bullet.x = clamp(bullet.x, bullet.r, W - bullet.r);
             bullet.y = clamp(bullet.y, bullet.r, H - bullet.r);
         }

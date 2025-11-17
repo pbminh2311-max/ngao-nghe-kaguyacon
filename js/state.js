@@ -39,6 +39,9 @@ export function setBuffTimer(val) { buffTimer = val; }
 export let buffs = [];
 export function setBuffs(newBuffs) { buffs = newBuffs; }
 
+export let enemySlowFactor = 1;
+export function setEnemySlowFactor(val) { enemySlowFactor = val; }
+
 // --- Developer State ---
 export let devMode = false;
 export let devNoWalls = false;

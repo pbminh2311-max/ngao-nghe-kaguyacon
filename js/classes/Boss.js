@@ -112,6 +112,25 @@ export default class Boss extends Tank {
         console.log(`[Boss Setup] Boss type: ${this.bossType}, Final moveSpeed: ${this.moveSpeed}`);
     }
     
+    reset() {
+        console.log(`[Boss Reset] Resetting state for boss type: ${this.bossType}`);
+        this.hp = this.maxHp;
+        this.x = W / 2;
+        this.y = H / 2;
+        this.vx = 0;
+        this.vy = 0;
+        this.speed = 0;
+        this.angle = 0;
+        
+        // Reset skill-specific properties
+        this.hasSplit = false;
+        this.isDefending = false;
+        this.damageReduction = 1;
+        this.isHealing = false;
+        this.isJumping = false;
+        this.setupBossStats(); // This will correctly reset skill cooldowns
+    }
+    
     draw(ctx){
         // Modern Boss Design
         ctx.save(); 
@@ -139,23 +158,23 @@ drawModernHealthBar(ctx) {
     switch(this.bossType) {
         case 'slime':
             primaryColor = '#4ade80'; secondaryColor = '#22c55e'; accentColor = '#16a34a';
-            bossName = 'HOÀNG THẠCH ĐẾ'; bossIcon = '🟢'; 
+            bossName = 'Slime Chúa'; bossIcon = '🟢'; 
             break;
         case 'wolf':
             primaryColor = '#6366f1'; secondaryColor = '#4338ca'; accentColor = '#3730a3';
-            bossName = 'DẠ LANG THẦN'; bossIcon = '🐺'; 
+            bossName = 'Sói Đêm'; bossIcon = '🐺'; 
             break;
         case 'golem':
             primaryColor = '#78716c'; secondaryColor = '#57534e'; accentColor = '#44403c';
-            bossName = 'GOLEM ĐÁ'; bossIcon = '🗿';
+            bossName = 'Golem Đá'; bossIcon = '🗿';
             break;
         case 'witch':
             primaryColor = '#7c3aed'; secondaryColor = '#6d28d9'; accentColor = '#4c1d95';
-            bossName = 'PHÙ THỦY BÓng ĐÊM'; bossIcon = '🔮';
+            bossName = 'Phù Thủy'; bossIcon = '🔮';
             break;
         case 'treant':
             primaryColor = '#16a34a'; secondaryColor = '#15803d'; accentColor = '#14532d';
-            bossName = 'NGƯỜI CÂY CỔ ĐẠI'; bossIcon = '🌳';
+            bossName = 'Treant'; bossIcon = '🌳';
             break;
         default:
             primaryColor = '#ef4444'; secondaryColor = '#dc2626'; accentColor = '#b91c1c';

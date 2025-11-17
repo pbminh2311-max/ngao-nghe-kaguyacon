@@ -6,12 +6,10 @@ import { devMode, setDevMode, p1, p2, boss, gameMode, p1FocusMode, setP1FocusMod
 const settingsPanel = document.getElementById('settingsPanel');
 const instructionsPanel = document.getElementById('instructionsPanel');
 const settingsCloseX = document.getElementById('settingsCloseX');
-const instructionsCloseX = document.getElementById('instructionsCloseX');
 const settingsDevModeInput = document.getElementById('settingsDevMode');
 const settingsP1FocusInput = document.getElementById('settingsP1Focus');
 const settingsP2FocusInput = document.getElementById('settingsP2Focus');
 const settingsInstructionsInput = document.getElementById('settingsInstructions');
-const settingsFullscreenBtn = document.getElementById('settingsFullscreenBtn');
 const settingsSpawnBotBtn = document.getElementById('settingsSpawnBot');
 
 const settingsMaxHpInput = document.getElementById('settingsMaxHp');
@@ -21,6 +19,7 @@ const settingsReloadInput = document.getElementById('settingsReload');
 const settingsTurnSpeedInput = document.getElementById('settingsTurnSpeed');
 const settingsFrictionInput = document.getElementById('settingsFriction');
 const settingsReloadRateInput = document.getElementById('settingsReloadRate');
+const settingsStatsGroup = document.getElementById('settingsStatsGroup');
 
 export function toggleSettingsPanel(force) {
     let shouldShow;
@@ -39,18 +38,13 @@ export function toggleInstructionsPanel(force) {
     if (shouldShow && settingsPanel) settingsPanel.classList.add('hidden');
 }
 
-function updateFullscreenButton() {
-    if (!settingsFullscreenBtn) return;
-    const isFull = !!document.fullscreenElement;
-    settingsFullscreenBtn.textContent = isFull ? 'Thoát toàn màn hình' : 'Toàn màn hình';
-}
-
 export function syncSettingsUI() {
     if (settingsDevModeInput) settingsDevModeInput.checked = devMode;
     const instructionsVisible = instructionsPanel ? !instructionsPanel.classList.contains('hidden') : false;
     if (settingsInstructionsInput) settingsInstructionsInput.checked = instructionsVisible;
     if (settingsP1FocusInput) settingsP1FocusInput.checked = p1FocusMode;
     if (settingsP2FocusInput) settingsP2FocusInput.checked = p2FocusMode;
+    if (settingsStatsGroup) settingsStatsGroup.classList.toggle('hidden', !devMode);
 
     if (settingsMaxHpInput && p1) settingsMaxHpInput.value = Math.round(p1.maxHp);
     if (settingsSpeedInput && p1) {
@@ -145,25 +139,13 @@ export function applyStatSettings() {
 }
 
 export function initSettings() {
-    if (settingsFullscreenBtn) {
-        settingsFullscreenBtn.addEventListener('click', () => {
-            if (document.fullscreenElement) {
-                document.exitFullscreen();
-            } else {
-                document.documentElement.requestFullscreen().catch(err => {
-                    alert(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
-                });
-            }
-        });
-        document.addEventListener('fullscreenchange', updateFullscreenButton);
-        updateFullscreenButton();
-    }
 
     if (settingsCloseX) settingsCloseX.addEventListener('click', () => toggleSettingsPanel(false));
     if (instructionsCloseX) instructionsCloseX.addEventListener('click', () => toggleInstructionsPanel(false));
     if (settingsDevModeInput) settingsDevModeInput.addEventListener('change', e => {
         // Use the imported function to toggle dev mode
         toggleDevMode(!!e.target.checked);
+        syncSettingsUI();
     });
     if (settingsInstructionsInput) settingsInstructionsInput.addEventListener('change', e => toggleInstructionsPanel(!!e.target.checked));
     if (settingsP1FocusInput) settingsP1FocusInput.addEventListener('change', e => {

@@ -1,6 +1,6 @@
 import { BUFF_COLORS } from './constants.js';
-import { clamp, dist, normalizeAngle, roundRect, drawEffectRing, drawChainAround } from './utils.js';
-import { canvas, ctx, W, H, initCanvas } from './canvas.js';
+import { clamp, dist, normalizeAngle, roundRect, drawEffectRing, drawChainAround, getBossBuffName } from './utils.js';
+import { canvas, ctx, W, H, initCanvas } from './canvas.js'; 
 import Buff from './classes/Buff.js';
 import { styleBulletForOwner, applyEffect, applyPoisonEffect, showStatus, tagEffect, updateAllEffects } from './systems/effects.js';
 import { BuffFactory } from './systems/buffs.js';
@@ -21,8 +21,8 @@ import {
     setTanks, setBullets, setBuffs
 } from './state.js';
 
-export { reapplyPermanentBuffs, showBuffSelection, exitBossMode, bossMode, updateGameModeUI, setDevMode };
-export { pickHomingTarget, clamp, dist, normalizeAngle, roundRect, drawChainAround, BUFF_COLORS, drawEffectRing };
+export { reapplyPermanentBuffs, showBuffSelection, exitBossMode, bossMode, updateGameModeUI, setDevMode, returnToMainMenu };
+export { pickHomingTarget, clamp, dist, normalizeAngle, roundRect, drawChainAround, BUFF_COLORS, drawEffectRing, getBossBuffName };
 
 
 const msgEl=document.getElementById('msg'); let msgTimer=0;
@@ -36,6 +36,17 @@ export function toggleDevMode(val) {
     if (devHintEl) devHintEl.style.display = devMode ? 'block' : 'none';
     const devIns = document.getElementById('devInstructionsCard');
     if (devIns) devIns.classList.toggle('hidden', !devMode);
+    syncSettingsUI();
+}
+
+const fullscreenBtn = document.getElementById('fullscreenToggleBtn');
+
+function updateFullscreenButton() {
+    if (!fullscreenBtn) return;
+    const isFull = !!document.fullscreenElement;
+    fullscreenBtn.textContent = isFull ? '❏' : '⛶';
+    fullscreenBtn.title = isFull ? 'Thoát toàn màn hình' : 'Toàn màn hình';
+    fullscreenBtn.setAttribute('aria-label', fullscreenBtn.title);
 }
 
 randomObstacles();
@@ -44,6 +55,20 @@ initMenu();
 initCanvas();
 initBossMode();
 updateGameModeUI();
+
+if (fullscreenBtn) {
+    fullscreenBtn.addEventListener('click', () => {
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        } else {
+            document.documentElement.requestFullscreen().catch(err => {
+                alert(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+        }
+    });
+    document.addEventListener('fullscreenchange', updateFullscreenButton);
+    updateFullscreenButton();
+}
 
 let last = performance.now();
 
@@ -54,6 +79,18 @@ export let gameUI = {
     settingsBtn: {x: W - 50, y: 10, w: 40, h: 40, hovered: false},
     devModeBtn: {x: W - 200, y: 10, w: 40, h: 40, hovered: false}
 };
+
+let hasLoggedPause = false; // Cờ để chỉ log một lần
+
+const buffInfoButton = {
+    x: 0,
+    y: 0,
+    w: 0,
+    h: 0,
+    hovered: false,
+    visible: false
+};
+let showBuffList = false;
 
 function update(dt, now) {
     updateMovingObstacles(dt);
@@ -75,13 +112,21 @@ function loop(now){
         requestAnimationFrame(loop);
         return;
     }
-    
+
     const dt = now - last;
     last = now;
-    update(dt, now);
+
+    // Chỉ cập nhật logic game nếu không ở màn hình Game Over
+    if (!bossMode.showingGameOver) {
+        // Reset cờ khi game tiếp tục
+        hasLoggedPause = false;
+        update(dt, now);
+    }
+
     render(ctx, now);
     if(msgTimer>0){ msgTimer--; if(msgTimer===0) msgEl.textContent=''; }
     updateHUD();
+    drawGameInfo(ctx); // Vẽ thông tin game mode
     requestAnimationFrame(loop);
 }
 document.addEventListener('keydown', e=>{
@@ -89,6 +134,120 @@ document.addEventListener('keydown', e=>{
         handleDevKeys(e);
     }
 });
+
+function drawGameInfo(ctx) {
+    // Chỉ hiển thị thông tin này trong chế độ đấu boss
+    if (gameMode !== 'vsboss') {
+        buffInfoButton.visible = false;
+        buffInfoButton.hovered = false;
+        showBuffList = false;
+        return;
+    }
+
+    const paddingX = 18;
+    const paddingY = 10;
+    const floorNumber = Number.isFinite(bossMode.currentFloor) ? bossMode.currentFloor : 1;
+    const floorText = `Tầng ${floorNumber}`;
+    const floorFont = '700 14px "Segoe UI", sans-serif';
+
+    const starSize = 32;
+
+    ctx.save();
+    ctx.font = floorFont;
+
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    const textMetrics = ctx.measureText(floorText);
+    const badgeWidth = textMetrics.width + paddingX * 2;
+    const badgeHeight = paddingY * 2 + 15;
+    const x = W - badgeWidth - 20; // Đặt ở góc dưới phải
+    const y = H - badgeHeight - 20; // Đặt ở góc dưới phải
+
+    // Buff star button (positioned above the badge)
+    const starX = W - starSize - 20;
+    const starY = y - starSize - 14;
+    buffInfoButton.x = starX;
+    buffInfoButton.y = starY;
+    buffInfoButton.w = starSize;
+    buffInfoButton.h = starSize;
+    buffInfoButton.visible = true;
+
+    const starCenterX = starX + starSize / 2;
+    const starCenterY = starY + starSize / 2;
+
+    ctx.shadowColor = buffInfoButton.hovered || showBuffList ? 'rgba(251, 191, 36, 0.6)' : 'rgba(15, 23, 42, 0.35)';
+    ctx.shadowBlur = buffInfoButton.hovered || showBuffList ? 10 : 8;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 4;
+
+    ctx.fillStyle = showBuffList ? '#fbbf24' : buffInfoButton.hovered ? '#fde68a' : 'rgba(255,255,255,0.92)';
+    roundRect(ctx, starX, starY, starSize, starSize, 10, true, false);
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = showBuffList ? '#1f2937' : '#111827';
+    ctx.font = '700 18px "Segoe UI Symbol", sans-serif';
+    ctx.fillText('✦', starCenterX, starCenterY + 1);
+
+    // Restore font settings for floor badge
+    ctx.font = floorFont;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Nền huy hiệu
+    ctx.fillStyle = 'rgba(30, 41, 59, 0.85)'; // Màu xám đậm, bán trong suốt
+    roundRect(ctx, x, y, badgeWidth, badgeHeight, 10, true, false);
+
+    // Viền phát sáng
+    ctx.shadowColor = '#a78bfa'; // Màu tím violet
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = 'rgba(196, 181, 253, 0.7)'; // Màu tím nhạt hơn
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, x, y, badgeWidth, badgeHeight, 10, false, true);
+
+    ctx.shadowBlur = 0;
+
+    // Chữ
+    ctx.fillStyle = '#e0e7ff'; // Màu trắng ngà
+    ctx.shadowColor = 'rgba(0,0,0,0)';
+    ctx.fillText(floorText, x + badgeWidth / 2, y + badgeHeight / 2);
+
+    if (showBuffList) {
+        const listFont = '600 13px "Segoe UI", sans-serif';
+        ctx.font = listFont;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        const buffNames = bossMode.permanentBuffs.length
+            ? bossMode.permanentBuffs.map(getBossBuffName)
+            : ['Không có buff nào'];
+        const listPaddingX = 14;
+        const listPaddingY = 12;
+        const lineHeight = 20;
+        let maxWidth = 0;
+        buffNames.forEach(name => {
+            const w = ctx.measureText(name).width;
+            if (w > maxWidth) maxWidth = w;
+        });
+        const panelWidth = listPaddingX * 2 + maxWidth;
+        const panelHeight = listPaddingY * 2 + buffNames.length * lineHeight;
+        let panelX = starCenterX - panelWidth / 2;
+        panelX = Math.max(20, Math.min(panelX, W - panelWidth - 20));
+        const panelY = Math.max(20, starY - panelHeight - 12);
+
+        ctx.shadowColor = 'rgba(148, 163, 184, 0.35)';
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.94)';
+        roundRect(ctx, panelX, panelY, panelWidth, panelHeight, 10, true, false);
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#e5e7eb';
+        buffNames.forEach((name, i) => {
+            const textY = panelY + listPaddingY + i * lineHeight + lineHeight / 2;
+            ctx.fillText(name, panelX + listPaddingX, textY);
+        });
+    }
+
+    ctx.restore();
+}
 
 // Mouse event handling for in-game UI
 canvas.addEventListener('mousemove', e => {
@@ -104,9 +263,19 @@ canvas.addEventListener('mousemove', e => {
                                   y >= gameUI.settingsBtn.y && y <= gameUI.settingsBtn.y + gameUI.settingsBtn.h);
     gameUI.devModeBtn.hovered = (x >= gameUI.devModeBtn.x && x <= gameUI.devModeBtn.x + gameUI.devModeBtn.w &&
                                  y >= gameUI.devModeBtn.y && y <= gameUI.devModeBtn.y + gameUI.devModeBtn.h);
+
+    if (gameMode === 'vsboss' && buffInfoButton.visible) {
+        buffInfoButton.hovered = (
+            x >= buffInfoButton.x && x <= buffInfoButton.x + buffInfoButton.w &&
+            y >= buffInfoButton.y && y <= buffInfoButton.y + buffInfoButton.h
+        );
+    } else {
+        buffInfoButton.hovered = false;
+    }
 });
 
-canvas.addEventListener('click', e => {
+canvas.addEventListener('pointerdown', e => {
+    if (mainMenuVisible) return;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -114,7 +283,13 @@ canvas.addEventListener('click', e => {
     // Home button
     if(x >= gameUI.homeBtn.x && x <= gameUI.homeBtn.x + gameUI.homeBtn.w &&
        y >= gameUI.homeBtn.y && y <= gameUI.homeBtn.y + gameUI.homeBtn.h) {
-        returnToMainMenu();
+        // Nếu đang trong chế độ boss, cần gọi hàm exit để dọn dẹp
+        if (gameMode === 'vsboss') {
+            exitBossMode();
+        } else {
+            // Nếu ở chế độ thường, quay về menu chính ngay lập tức
+            returnToMainMenu();
+        }
         return;
     }
     
@@ -129,6 +304,14 @@ canvas.addEventListener('click', e => {
     if(x >= gameUI.settingsBtn.x && x <= gameUI.settingsBtn.x + gameUI.settingsBtn.w &&
        y >= gameUI.settingsBtn.y && y <= gameUI.settingsBtn.y + gameUI.settingsBtn.h) {
         toggleSettingsPanel();
+        return;
+    }
+
+    // Buff info button
+    if (gameMode === 'vsboss' && buffInfoButton.visible &&
+        x >= buffInfoButton.x && x <= buffInfoButton.x + buffInfoButton.w &&
+        y >= buffInfoButton.y && y <= buffInfoButton.y + buffInfoButton.h) {
+        showBuffList = !showBuffList;
         return;
     }
 

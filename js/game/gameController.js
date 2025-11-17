@@ -20,9 +20,70 @@ import { lineCircleColl, circleColl, pointToLineDistanceSq, circleRectColl } fro
 import { obstacles, randomObstacles, clearObstacles } from './obstacles.js';
 import { showStatus, applyPoisonEffect, applyEffect, tagEffect } from '../systems/effects.js';
 import { BuffFactory } from '../systems/buffs.js';
-import { bossMode, exitBossMode, showBuffSelection, reapplyPermanentBuffs, applyBossModeBuff } from './bossMode.js';
+import { bossMode, exitBossMode, showBuffSelection, reapplyPermanentBuffs, applyBossModeBuff, showBossGameOver } from './bossMode.js';
 import { buffTypes } from '../constants.js';
+import { spawnShotSplitChildren } from '../utils/shotSplit.js';
 import { applyStatSettings, syncSettingsUI } from '../ui/settings.js';
+
+const FIRE_BURN_DURATION = 2000;
+const FIRE_BURN_RATIO = 0.5;
+const ICE_SLOW_DURATION = 2500;
+const ICE_SLOW_MULTIPLIER = 0.7;
+
+function applyFireShotEffect(target, baseDamage) {
+    if (!target) return;
+    const damageValue = Math.max(0, baseDamage || 0);
+    if (damageValue <= 0) return;
+    const burnPerMs = (damageValue * FIRE_BURN_RATIO) / 1000;
+    const effect = applyEffect(target, 'bossFireShotBurn', FIRE_BURN_DURATION,
+        state => {
+            state.burnPerMs = burnPerMs;
+            state.elapsed = 0;
+            if (target === p1 || target === p2) target.isBurning = true;
+        },
+        () => {
+            if (target === p1 || target === p2) target.isBurning = false;
+        },
+        (dt, tank, state) => {
+            if (!state || state.cancelled || dt <= 0) return;
+            const isPlayer = (tank === p1 || tank === p2);
+            if (devGodMode && isPlayer) return;
+            const damage = state.burnPerMs * dt;
+            if (damage <= 0 || tank.hp <= 0) return;
+            tank.hp = Math.max(0, tank.hp - damage);
+        }
+    );
+    if (effect) {
+        effect.burnPerMs = burnPerMs;
+        showStatus(target, '🔥 Đốt cháy!', BUFF_COLORS.fireIceShot || '#f472b6', 800);
+        tagEffect(effect, 'Fire Shot', BUFF_COLORS.fireIceShot || '#f472b6');
+    }
+}
+
+function applyIceShotEffect(target) {
+    if (!target) return;
+    const effect = applyEffect(target, 'bossIceShotSlow', ICE_SLOW_DURATION,
+        state => {
+            state.previousFactor = typeof target.bossIceSlowFactor === 'number' ? target.bossIceSlowFactor : 1;
+            target.bossIceSlowFactor = state.previousFactor * ICE_SLOW_MULTIPLIER;
+        },
+        state => {
+            if (!state) return;
+            const base = typeof state.previousFactor === 'number' ? state.previousFactor : 1;
+            target.bossIceSlowFactor = base;
+        }
+    );
+    if (effect) {
+        if (typeof effect.previousFactor !== 'number') {
+            effect.previousFactor = typeof target.bossIceSlowFactor === 'number'
+                ? target.bossIceSlowFactor / ICE_SLOW_MULTIPLIER
+                : 1;
+        }
+        target.bossIceSlowFactor = effect.previousFactor * ICE_SLOW_MULTIPLIER;
+        showStatus(target, '❄️ Bị làm chậm!', BUFF_COLORS.fireIceShot || '#f472b6', 800);
+        tagEffect(effect, 'Ice Shot', BUFF_COLORS.fireIceShot || '#f472b6');
+    }
+}
 
 function fireNormalShot(tank, now) {
     if (!tank || !tank.canShoot(now)) return false;
@@ -50,9 +111,32 @@ function fireNormalShot(tank, now) {
 
     if (tank.ammo <= 0) return false;
 
+    const isTwinShotBonus = tank.hasTwinShot && tank.twinShotBonusCharges > 0;
+
     const bullet = tank.shoot(now);
     if (bullet) {
-        bullets.push(bullet);
+        // Xử lý Twin Shot
+        if (isTwinShotBonus) {
+            // Viên đạn đầu tiên
+            bullets.push(bullet);
+
+            // Lưu lại trạng thái bắn để viên đạn thứ 2 bay đúng hướng
+            const fireAngle = tank.angle;
+            const fireX = tank.x;
+            const fireY = tank.y;
+
+            // Bắn viên đạn thứ hai sau một độ trễ ngắn
+            setTimeout(() => {
+                const bonusBullet = tank.createBossBonusBullet(fireAngle, fireX, fireY);
+                if (bonusBullet) bullets.push(bonusBullet);
+            }, 80); // 80ms delay
+
+            tank.twinShotBonusCharges--;
+            showStatus(tank, '✦ Twin Shot!', BUFF_COLORS.twinShot, 800);
+        } else {
+            // Bắn bình thường nếu không có bonus
+            bullets.push(bullet);
+        }
         return true;
     }
     return false;
@@ -172,16 +256,76 @@ function handleBulletCollisions(now) {
 
                 const isPlayer = (t === p1 || t === p2);
                 const skipDamage = devGodMode && isPlayer;
+                const baseEffectDamage = b.fireIceSourceDamage || b.damage || 1;
                 addHitExplosion({ x: b.x, y: b.y, color: '#f00', startTime: now });
 
-                if (!t.shield && !skipDamage) {
-                    let damage = Math.max(1, b.damage || 1);
+                let damageDealt = 0;
+                let applyDirectDamage = !skipDamage;
+
+                if (applyDirectDamage && t.hasBossShield && t.bossShieldReady) {
+                    t.bossShieldReady = false;
+                    showStatus(t, '🛡️ Khiên chặn đòn!', BUFF_COLORS.bossShield || '#6ee7b7', 900);
+                    applyDirectDamage = false;
+                }
+
+                if (b.fireIceType === 'fire') {
+                    applyFireShotEffect(t, baseEffectDamage);
+                } else if (b.fireIceType === 'ice') {
+                    applyIceShotEffect(t);
+                }
+
+                if (!t.shield && applyDirectDamage) {
+                    let damage = Math.max(0.1, b.damage || 1);
+
                     if (t instanceof Boss && t.damageReduction && t.damageReduction < 1) {
                         damage *= t.damageReduction;
                         damage = Math.max(0.1, damage);
                     }
+                    const prevHp = t.hp;
                     t.hp = Math.max(0, t.hp - damage);
+                    damageDealt = Math.max(0, prevHp - t.hp);
                     if (b.isPoison) applyPoisonEffect(t);
+                }
+
+                if (damageDealt > 0 && b.owner && b.owner.lifeStealAmount > 0 && b.owner.hp > 0) {
+                    const healAmount = damageDealt * b.owner.lifeStealAmount;
+                    if (healAmount > 0) {
+                        const prevHp = b.owner.hp;
+                        const maxHp = b.owner.maxHp || prevHp;
+                        b.owner.hp = Math.min(maxHp, prevHp + healAmount);
+                        if (b.owner.hp > prevHp) {
+                            b.owner.lifeStealPulseTimer = 600;
+                            // Removed heal pulse trigger
+                            showStatus(b.owner, 'Hút máu!', BUFF_COLORS.lifeSteal, 600);
+                        }
+                    }
+                }
+
+                if (b.isPiercing && typeof b.bossPierceRemaining === 'number') {
+                    if (b.bossPierceDamageFactor && b.bossPierceDamageFactor < 1) {
+                        b.damage = Math.max(0.1, (b.damage || 1) * b.bossPierceDamageFactor);
+                    }
+                    b.bossPierceRemaining = Math.max(0, b.bossPierceRemaining - 1);
+                    if (b.bossPierceRemaining < 0) {
+                        if (b._bossPierceState) {
+                            b.isPiercing = !!b._bossPierceState.hadPierce;
+                        } else {
+                            b.isPiercing = false;
+                        }
+                        delete b.bossPierceRemaining;
+                        delete b.bossPierceDamageFactor;
+                        delete b._bossPierceState;
+                        delete b.bossPierceExhausted;
+                    } else if (b.bossPierceRemaining === 0) { // Ngừng xuyên khi hết lượt
+                        b.isPiercing = false;
+                        b.bossPierceExhausted = true;
+                    }
+                }
+
+                if (b.hasShotSplit && !b._shotSplitConsumed && t instanceof Boss) {
+                    spawnShotSplitChildren(b);
+                    b.alive = false;
+                    break;
                 }
 
                 if (!b.isPiercing) {
@@ -194,7 +338,7 @@ function handleBulletCollisions(now) {
 }
 
 function checkWinConditions() {
-    if (roundEnding || bossMode.showingBuffSelection) return;
+    if (roundEnding || bossMode.showingBuffSelection || bossMode.showingGameOver) return;
 
     for (let i = tanks.length - 1; i >= 0; i--) {
         const t = tanks[i];
@@ -202,17 +346,10 @@ function checkWinConditions() {
             if (t.isClone || t.isMiniSlime) {
                 tanks.splice(i, 1);
             } else if (t === boss) {
-                continue;
+                // Boss defeat is handled below
             } else {
-                if (boss && gameMode === 'vsboss') {
-                    const alivePlayers = [p1, p2].filter(p => p && p.hp > 0);
-                    if (alivePlayers.length === 0) {
-                        setOverlay('GAME OVER - Boss Wins!', 2000);
-                        setOverlay('GAME OVER - Boss Wins!', performance.now() + 2000);
-                        setRoundEnding(true);
-                        setTimeout(() => { exitBossMode(); setOverlay(null, 0); setRoundEnding(false); }, 2000);
-                    }
-                } else {
+                // Only trigger PvP win condition in PvP mode
+                if (gameMode === 'pvp') {
                     if (t === p1) setScore(scoreP1, scoreP2 + 1);
                     else setScore(scoreP1 + 1, scoreP2);
                     setOverlay((t === p1 ? 'P2' : 'P1') + ' WIN', 1000);
@@ -239,6 +376,19 @@ function checkWinConditions() {
             showBuffSelection();
         }, 2000);
     }
+
+    // Check for player defeat in boss mode (moved outside the loop for reliability)
+    if (!roundEnding && gameMode === 'vsboss') {
+        const alivePlayers = [p1, p2].filter(p => p && p.hp > 0);
+        if (alivePlayers.length === 0) {
+            console.log('[GAME OVER] 1. Điều kiện thua đã được kích hoạt (Tất cả người chơi đã bị hạ).');
+            setRoundEnding(true);
+            // Thêm một độ trễ nhỏ để đảm bảo frame hiện tại được vẽ xong
+            setTimeout(() => {
+                showBossGameOver();
+            }, 50);
+        }
+    }
 }
 
 function handleBuffSpawning(dt) {
@@ -255,6 +405,17 @@ function handleBuffPickup(now) {
     for (const buff of buffs) {
         if (!buff.active) continue;
         for (const t of tanks) {
+            if (t.bossMagnetRadius && t.bossMagnetRadius > 0) {
+                const magnetDist = dist(t, buff);
+                if (magnetDist < t.bossMagnetRadius) {
+                    const pullStrength = clamp(1 - magnetDist / t.bossMagnetRadius, 0.25, 0.9);
+                    const angle = Math.atan2(t.y - buff.y, t.x - buff.x);
+                    buff.x += Math.cos(angle) * pullStrength * 6;
+                    buff.y += Math.sin(angle) * pullStrength * 6;
+                    addPickupFX({ x: buff.x, y: buff.y, color: BUFF_COLORS.magnetSmall, start: now, duration: 200 });
+                }
+            }
+
             if (dist(t, buff) < t.r + buff.r) {                
                 // Xác định target cho debuff
                 let debuffTarget = null;
@@ -579,14 +740,12 @@ export function spawnBuff(type) {
 
 export function resetAfterKill() {
     if (gameMode === 'vsboss') {
+        console.log('[RESET] Starting resetAfterKill for boss mode.');
+        setRoundEnding(false); // Reset round ending state
         p1.x = 110; p1.y = 110; p1.vx = 0; p1.vy = 0; p1.angle = 0;
         p2.x = 790; p2.y = 450; p2.vx = 0; p2.vy = 0; p2.angle = Math.PI;
         if (boss) {
-            boss.hp = boss.maxHp;
-            boss.x = W / 2;
-            boss.y = H / 2;
-            boss.vx = 0;
-            boss.vy = 0;
+            boss.reset();
         }
         setBullets([]); setBuffs([]);
         setTanks(tanks.filter(t => !t.isClone && !t.isMiniSlime));
@@ -595,19 +754,23 @@ export function resetAfterKill() {
         if (typeof reapplyPermanentBuffs === 'function') reapplyPermanentBuffs();
         p1.hp = p1.maxHp;
         p2.hp = p2.maxHp;
+        console.log('[RESET] Player HP restored immediately after reset.');
     } else {
-        p1.hp = p1.maxHp; p1.x = 110; p1.y = 110; p1.vx = 0; p1.vy = 0; p1.angle = 0; p1.resetStatus();
-        p2.hp = p2.maxHp; p2.x = 790; p2.y = 450; p2.vx = 0; p2.vy = 0; p2.angle = Math.PI; p2.resetStatus();
+        if (typeof p1.reset === 'function') p1.reset();
+        if (typeof p2.reset === 'function') p2.reset();
+        p1.hp = p1.maxHp; p1.x = 110; p1.y = 110; p1.vx = 0; p1.vy = 0; p1.angle = 0;
+        p2.hp = p2.maxHp; p2.x = 790; p2.y = 450; p2.vx = 0; p2.vy = 0; p2.angle = Math.PI;
         p1.possession = false; p1.possessionFired = false;
         p2.possession = false; p2.possessionFired = false;
         p1.silenced = false; p2.silenced = false;
         p1.rooted = false; p2.rooted = false;
         p1.invisible = false; p2.invisible = false;
-        setBullets([]); setBuffs([]);
-        setTanks(tanks.filter(t => !t.isClone));
-        if (tanks.length < 2) {
-            setTanks([p1, p2]);
-        }
+        setBullets([]);
+        setBuffs([]);
+
+        const playersOnly = [p1, p2];
+        setTanks(playersOnly);
+        setBoss(null);
     }
     clearObstacles();
     clearAnimations();

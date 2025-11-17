@@ -21,6 +21,96 @@
         border-radius: 10px;
         border: 2px solid rgba(15, 23, 42, 0.8);
     }
+
+    /* --- Buff Selection & Game Over Card Styles --- */
+    .buff-card, .boss-gameover-btn {
+        background: radial-gradient(circle, rgba(49, 46, 129, 0.7) 0%, rgba(30, 27, 75, 0.9) 100%);
+        border: 2px solid rgba(139, 92, 246, 0.3);
+        border-radius: 12px;
+        padding: 24px;
+        text-align: center;
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        min-width: 180px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    }
+
+    .buff-card:hover, .boss-gameover-btn:hover {
+        transform: translateY(-8px);
+        border-color: rgba(196, 181, 253, 0.8);
+        box-shadow: 0 10px 30px rgba(139, 92, 246, 0.4);
+    }
+
+    .buff-card__key {
+        font-size: 32px;
+        font-weight: bold;
+        color: #c4b5fd;
+        margin-bottom: 12px;
+        text-shadow: 0 0 10px rgba(196, 181, 253, 0.5);
+    }
+
+    .buff-card__title {
+        font-weight: bold;
+        color: #f5d0fe;
+        margin-bottom: 8px;
+        font-size: 18px;
+    }
+
+    .buff-card__desc {
+        font-size: 13px;
+        color: #d8b4fe;
+        line-height: 1.4;
+    }
+
+    .boss-gameover-overlay {
+        background: radial-gradient(circle, rgba(127, 29, 29, 0.5) 0%, rgba(31, 25, 46, 0.8) 70%);
+        backdrop-filter: blur(8px);
+    }
+
+    .boss-gameover-card {
+        text-align: center;
+        animation: fadeIn-scaleUp 0.5s ease-out forwards;
+    }
+
+    .boss-gameover-orb {
+        font-size: 80px;
+        line-height: 1;
+        color: #ef4444;
+        margin: 0 auto 20px;
+        text-shadow: 0 0 25px #ef4444;
+        animation: pulse-red 2s infinite;
+    }
+
+    @keyframes pulse-red {
+        0% { transform: scale(0.95); text-shadow: 0 0 25px #ef4444; }
+        70% { transform: scale(1); text-shadow: 0 0 40px #ff6b6b; }
+        100% { transform: scale(0.95); text-shadow: 0 0 25px #ef4444; }
+    }
+
+    @keyframes fadeIn-scaleUp {
+        from { opacity: 0; transform: scale(0.9); }
+        to { opacity: 1; transform: scale(1); }
+    }
+
+    .boss-gameover-title {
+        font-size: 64px; 
+        color: #fecaca; 
+        margin-bottom: 40px; 
+        text-shadow: 0 0 15px #ef4444, 0 0 5px #fff;
+        font-weight: 900;
+        letter-spacing: 2px;
+    }
+
+    .boss-gameover-options {
+        display: flex; gap: 30px;
+    }
+
+    /* --- Buff Selection Layout --- */
+    .buff-selection-options {
+        display: flex; /* Bật flexbox để sắp xếp các thẻ */
+        flex-direction: row; /* Sắp xếp theo chiều ngang */
+        gap: 20px; /* Khoảng cách giữa các thẻ */
+    }
 </style>
 </head>
 <body>
@@ -95,95 +185,83 @@
                 <li><span>Bắn</span><kbd>Enter</kbd></li>
             </ul>
         </div>
-        <div class="player-block dev">
-            <div class="player-title">Developer Mode</div>
-            <p>Bật bằng nút bên phải để thử nhanh các buff.</p>
-            <div id="devHint">
-                <div class="hint-row"><kbd>1-0</kbd>, <kbd>Q</kbd>, <kbd>Y</kbd>, <kbd>E</kbd>, <kbd>R</kbd>, <kbd>T</kbd>, <kbd>U</kbd>, <kbd>I</kbd>, <kbd>P</kbd>, <kbd>K</kbd>, <kbd>J</kbd>, <kbd>L</kbd> = spawn buff tương ứng</div>
-                <div class="hint-row"><kbd>H</kbd> full HP · <kbd>B</kbd> spawn đạn · <kbd>O</kbd> reset game · <kbd>F</kbd> fast reload · <kbd>N</kbd> bật/tắt no wall · <kbd>G</kbd> bật/tắt bất tử</div>
-            </div>
-        </div>
-    </div>
-</section>
-<section id="settingsPanel" class="overlay-panel hidden" aria-label="Cài đặt">
-    <div class="card settings" style="position:relative;">
-        <button class="settings-close-x" id="settingsCloseX">×</button>
-        <div class="settings-header">
-            <h4>Cài đặt</h4>
-            <p>Điều chỉnh Developer Mode, hiển thị và thông số gameplay.</p>
-        </div>
-    <div class="settings-grid">
-        <div class="settings-group">
-            <div class="settings-title">Tùy chọn</div>
-            <div class="settings-row">
-                <label><input type="checkbox" id="settingsDevMode"> Developer Mode</label>
-            </div>
-            <div class="settings-row">
-                <label><input type="checkbox" id="settingsInstructions" checked> Hiển thị hướng dẫn</label>
-            </div>
-            <div class="settings-row">
-                <label><input type="checkbox" id="settingsP1Focus"> P1 Khóa mục tiêu</label>
-            </div>
-            <div class="settings-row">
-                <label><input type="checkbox" id="settingsP2Focus"> P2 Khóa mục tiêu</label>
-            </div>
-        </div>
-        <div class="settings-group">
-            <div class="settings-title">Thông số</div>
-            <div class="settings-row">
-                <span>Max HP</span>
-                <input id="settingsMaxHp" class="settings-input" type="number" step="0.1" min="0.1" value="3">
-            </div>
-            <div class="settings-row">
-                <span>Tốc độ</span>
-                <input id="settingsSpeed" class="settings-input" type="number" step="0.01" min="0.01" value="0.5">
-            </div>
-            <div class="settings-row">
-                <span>Số đạn tối đa</span>
-                <input id="settingsAmmo" class="settings-input" type="number" step="1" min="1" value="3">
-
-            </div>
-            <div class="settings-row">
-                <span>Thời gian nạp đạn (ms)</span>
-                <input id="settingsReload" class="settings-input" type="number" step="10" min="0" value="320">
-
-            </div>
-            <div class="settings-row">
-                <span>Tốc độ quay</span>
-                <input id="settingsTurnSpeed" class="settings-input" type="number" step="0.01" min="0.01" value="0.06">
-
-            </div>
-            <div class="settings-row">
-                <span>Ma sát</span>
-                <input id="settingsFriction" class="settings-input" type="number" step="0.01" min="0.01" max="1" value="0.93">
-
-            </div>
-            <div class="settings-row">
-                <span>Tốc độ hồi đạn</span>
-                <input id="settingsReloadRate" class="settings-input" type="number" step="0.001" min="0.001" value="0.0167">
-
-            </div>
-        </div>
-        <div class="settings-group">
-            <div class="settings-title">Hành động</div>
-            <div class="settings-actions">
-                <button id="settingsFullscreenBtn">Toàn màn hình</button>
-            </div>
-        </div>
-        <div class="settings-group">
-            <div class="settings-title">VS Boss Mode</div>
-            <div class="settings-actions">
-                <button class="btn" id="bossModeBtn2P">2 Players VS Boss</button>
-                <button class="btn" id="exitBossModeBtn" style="margin-top: 10px; --btn-from: #ff4757; --btn-to: #ff3742; --btn-shadow: rgba(255,71,87,0.3); display: none;">Exit Boss Mode</button>
-            </div>
-        </div>
-    </div>
     </div>
 </section>
 <!-- Game canvas container -->
 <div class="game-container">
     <canvas id="c" width="900" height="560"></canvas>
-    
+    <!-- Settings Overlay -->
+    <section id="settingsPanel" class="overlay-panel hidden" aria-label="Cài đặt">
+        <div class="overlay-panel__content">
+        <div class="card settings" style="position:relative;">
+            <button class="settings-close-x" id="settingsCloseX">×</button>
+            <div class="settings-header">
+                <h4>Cài đặt</h4>
+                <p>Điều chỉnh Developer Mode, hiển thị và thông số gameplay.</p>
+            </div>
+        <div class="settings-grid">
+            <div class="settings-group">
+                <div class="settings-title">Tùy chọn</div>
+                <div class="settings-row">
+                    <label><input type="checkbox" id="settingsDevMode"> Developer Mode</label>
+                </div>
+                <div class="settings-row">
+                    <label><input type="checkbox" id="settingsInstructions" checked> Hiển thị hướng dẫn</label>
+                </div>
+                <div class="settings-row">
+                    <label><input type="checkbox" id="settingsP1Focus"> P1 Khóa mục tiêu</label>
+                </div>
+                <div class="settings-row">
+                    <label><input type="checkbox" id="settingsP2Focus"> P2 Khóa mục tiêu</label>
+                </div>
+            </div>
+            <div class="settings-group" id="settingsStatsGroup">
+                <div class="settings-title">Thông số</div>
+                <div class="settings-row">
+                    <span>Max HP</span>
+                    <input id="settingsMaxHp" class="settings-input" type="number" step="0.1" min="0.1" value="3">
+                </div>
+                <div class="settings-row">
+                    <span>Tốc độ</span>
+                    <input id="settingsSpeed" class="settings-input" type="number" step="0.01" min="0.01" value="0.5">
+                </div>
+                <div class="settings-row">
+                    <span>Số đạn tối đa</span>
+                    <input id="settingsAmmo" class="settings-input" type="number" step="1" min="1" value="3">
+
+                </div>
+                <div class="settings-row">
+                    <span>Thời gian nạp đạn (ms)</span>
+                    <input id="settingsReload" class="settings-input" type="number" step="10" min="0" value="320">
+
+                </div>
+                <div class="settings-row">
+                    <span>Tốc độ quay</span>
+                    <input id="settingsTurnSpeed" class="settings-input" type="number" step="0.01" min="0.01" value="0.06">
+
+                </div>
+                <div class="settings-row">
+                    <span>Ma sát</span>
+                    <input id="settingsFriction" class="settings-input" type="number" step="0.01" min="0.01" max="1" value="0.93">
+
+                </div>
+                <div class="settings-row">
+                    <span>Tốc độ hồi đạn</span>
+                    <input id="settingsReloadRate" class="settings-input" type="number" step="0.001" min="0.001" value="0.0167">
+
+                </div>
+            </div>
+            <div class="settings-group">
+                <div class="settings-title">VS Boss Mode</div>
+                <div class="settings-actions">
+                    <button class="btn" id="bossModeBtn2P">2 Players VS Boss</button>
+                    <button class="btn" id="exitBossModeBtn" style="margin-top: 10px; --btn-from: #ff4757; --btn-to: #ff3742; --btn-shadow: rgba(255,71,87,0.3); display: none;">Exit Boss Mode</button>
+                </div>
+            </div>
+        </div>
+        </div>
+        </div>
+    </section>
     <!-- Main Menu Overlay -->
     <div id="mainMenuOverlay" class="main-menu-overlay">
         <div class="main-menu-container">
@@ -204,6 +282,7 @@
     
     <!-- Game UI will be drawn on canvas -->
 </div>
+<button id="fullscreenToggleBtn" class="fullscreen-btn" aria-label="Toàn màn hình" title="Toàn màn hình" style="position: absolute; bottom: 10px; right: 10px;"><span class="fullscreen-btn__icon">⛶</span></button>
 <div id="devInstructionsCard" class="card hidden" style="position: absolute; top: 60px; right: 10px; width: 280px; max-height: 450px; overflow-y: auto; z-index: 100; padding: 15px; background: rgba(20, 30, 45, 0.9); border: 1px solid #4a5568;">
     <h3 style="margin-top: 0; color: #ffd700; border-bottom: 1px solid #4a5568; padding-bottom: 8px;">Dev Mode Keys</h3>
     <div style="display: grid; grid-template-columns: auto 1fr; gap: 5px 15px; font-size: 13px;">
@@ -237,7 +316,7 @@
         <h4 style="grid-column: 1 / -1; color: #f6ad55; margin: 10px 0 5px;">Tạo Debuff:</h4>
         <strong style="color: #a0aec0;">Y:</strong> <span style="color: #e2e8f0;">Kẻ địch khổng lồ</span>
         <strong style="color: #a0aec0;">E:</strong> <span style="color: #e2e8f0;">Đảo phím</span>
-        <strong style_color: #a0aec0;>T:</strong> <span style="color: #e2e8f0;">Trói chân</span>
+        <strong style="color: #a0aec0;">T:</strong> <span style="color: #e2e8f0;">Trói chân</span>
         <strong style="color: #a0aec0;">K:</strong> <span style="color: #e2e8f0;">Câm lặng</span>
         <strong style="color: #a0aec0;">L:</strong> <span style="color: #e2e8f0;">Thôi miên</span>
 
@@ -283,25 +362,38 @@
     </div>
 </section>
 <!-- Game UI Info -->
-<div id="gameInfo" style="position: absolute; top: 10px; left: 10px; color: #fff; font-size: 14px; pointer-events: none; background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 8px;">
+<div id="gameInfo" style="display: none; position: absolute; top: 10px; left: 10px; color: #fff; font-size: 14px; pointer-events: none; background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 8px;">
     <div id="gameModeInfo">Mode: Player vs Player</div>
     <div id="floorInfo" style="display: none;">Floor: 1</div>
     <div id="permanentBuffsInfo" style="display: none; margin-top: 5px; font-size: 12px; color: #ffd700;">Buffs: None</div>
 </div>
 
 <!-- Boss Mode Buff Selection Overlay -->
-<div id="buffSelectionOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 2000; justify-content: center; align-items: center;">
-    <div class="card" style="padding: 30px; text-align: center; max-width: 600px;">
-        <h2 style="margin-bottom: 20px; color: #ffd700;">Choose Your Permanent Buff</h2>
-        <p style="margin-bottom: 30px; color: #ccc;">This buff will last for the rest of your Boss Mode run!</p>
-        <div id="buffOptions" style="display: flex; gap: 20px; justify-content: center;">
+<div id="buffSelectionOverlay" class="overlay buff-selection-overlay" style="display: none;">
+    <div class="buff-selection-card">
+        <div class="buff-selection-header">
+            <div class="buff-selection-orb">✨</div>
+            <div class="buff-selection-text">
+                <h2 class="buff-selection-title">Chọn buff vĩnh viễn</h2>
+                <p class="buff-selection-subtitle">Buff đã chọn sẽ theo bạn trong suốt hành trình đánh boss.</p>
+            </div>
+        </div>
+        <div id="buffOptions" class="buff-selection-options">
             <!-- Buff options will be populated by JavaScript -->
         </div>
-        <div style="margin-top: 20px; font-size: 14px; color: #888;">
-            <p>Press 1, 2, or 3 to select a buff</p>
+        <div class="buff-selection-footer">
+            <span>Nhấn phím <strong>1</strong> • <strong>2</strong> • <strong>3</strong> để chọn nhanh</span>
         </div>
     </div>
 </div>
+
+<div id="bossGameOverOverlay" class="overlay boss-gameover-overlay" style="display: none; flex-direction: column;">
+    <div class="boss-gameover-card">
+        <div class="boss-gameover-orb"></div>
+        <h1 class="boss-gameover-title">Game Over</h1>
+        <div id="bossGameOverOptions" class="boss-gameover-options">
+            <div id="retryBossBtn" class="boss-gameover-btn" style="--btn-from: #8b5cf6; --btn-to: #a78bfa; --btn-shadow: rgba(139, 92, 246, 0.3);"><div style="font-weight: bold; color: #ddd6fe; font-size: 20px;">Thử lại</div></div><div id="returnToMenuBtn" class="boss-gameover-btn" style="--btn-from: #4b5563; --btn-to: #6b7280; --btn-shadow: rgba(107, 114, 128, 0.3);"><div style="font-weight: bold; color: #e5e7eb; font-size: 20px;">Màn hình chính</div></div></div>
+    </div></div>
 
 <script type="module" src="js/main.js"></script>
 <script>
@@ -456,5 +548,7 @@
         });
     }
 </script>
+</div>
+</div>
 </body>
 </html>
