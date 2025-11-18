@@ -6,17 +6,20 @@ export function getBossBuffName(buffType) {
     const names = {
         lifeSteal: '🧛 Hút Máu',
         bounceShot: '↺ Nảy Đa Hồi',
-        bounceShot2: '↺↺ Nảy Đa Hồi II',
         bossPierce: '⤫ Xuyên Thấu',
-        bossPierce2: '⤫⤫ Xuyên Thấu II',
         bossFireRate: '⚡ Tốc Độ Bắn',
         bossMoveSpeed: '🏃 Tốc Độ Di Chuyển',
         twinShot: '✦ Song Đạn',
         magnetSmall: '🧲 Hút Nhỏ',
         shotSplit: '⚛️ Phân Tách Đạn',
+        shotSplit4: '⚛️×4 Đạn Chia 4',
+        ricochetTracking: '🎯 Ricochet Tracking',
+        poisonShot: '☠️ Poison Shot',
+        microShield: '🧿 MicroShield',
         bossShield: '🛡️ Khiên Bảo Hộ',
-        slowMotion10: '🐢 Làm Chậm 10%',
-        fireIceShot: '🔥❄️ Đạn Hỏa/Băng'
+        slowMotion10: '🐢 Làm Chậm 20%',
+        fireIceShot: '🔥❄️ Đạn Hỏa/Băng',
+        criticalHit: '💥 Chí Mạng'
     };
     return names[buffType] || buffType;
 }

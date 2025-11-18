@@ -1,5 +1,5 @@
 import { W, H } from '../canvas.js';
-import { p1, p2, bullets } from '../state.js';
+import { p1, p2, bullets, enemySlowFactor } from '../state.js';
 import { dist, clamp } from '../utils.js';
 import { circleRectColl, circleColl } from './collision.js';
 import { obstacles } from './obstacles.js';
@@ -93,26 +93,36 @@ function updateBossMovement(boss, target, dt) {
     }
 
     boss.speed *= boss.friction;
-    const moveX = Math.cos(boss.angle) * boss.speed;
-    const moveY = Math.sin(boss.angle) * boss.speed;
+    const iceFactor = typeof boss.bossIceSlowFactor === 'number' ? boss.bossIceSlowFactor : 1;
+    const slowFactor = (enemySlowFactor || 1) * iceFactor;
+    const slowedSpeed = boss.speed * slowFactor;
+
+    const moveX = Math.cos(boss.angle) * slowedSpeed;
+    const moveY = Math.sin(boss.angle) * slowedSpeed;
+
     const targetX = clamp(boss.x + moveX, boss.r + 4, W - boss.r - 4);
     const targetY = clamp(boss.y + moveY, boss.r + 4, H - boss.r - 4);
 
-    const collidesAt = (px, py) => {
-        for(const o of obstacles){
-            if(circleRectColl({ x: px, y: py, r: boss.r }, o)){
-                return true;
-            }
-        }
-        return false;
-    };
-
-    if(!collidesAt(targetX, targetY)){
+    if (boss.canPhase) {
         boss.x = targetX;
         boss.y = targetY;
     } else {
-        // If collision, bounce back slightly
-        boss.speed *= -0.5;
+        const collidesAt = (px, py) => {
+            for(const o of obstacles){
+                if(circleRectColl({ x: px, y: py, r: boss.r }, o)){
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        if(!collidesAt(targetX, targetY)){
+            boss.x = targetX;
+            boss.y = targetY;
+        } else {
+            // If collision, bounce back slightly
+            boss.speed *= -0.5;
+        }
     }
 }
 

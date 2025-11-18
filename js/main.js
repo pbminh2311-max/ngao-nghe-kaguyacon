@@ -10,10 +10,10 @@ import { resolveTankTank, resolveTankObstacles, isSameTeam, pickHomingTarget, li
 import { initMenu, mainMenuVisible, returnToMainMenu } from './ui/menu.js';
 import { initSettings, toggleSettingsPanel, toggleInstructionsPanel, applyStatSettings, syncSettingsUI } from './ui/settings.js';
 import { updateHUD, drawGameUI } from './ui/hud.js';
-import { updateGame, spawnBuff, resetAfterKill, handleDevKeys } from './game/gameController.js';
+import { updateGame, spawnBuff, resetAfterKill, handleDevKeys, triggerDevAction } from './game/gameController.js';
 import { render } from './rendering/draw.js';
 import { updateAnimations, clearAnimations } from './rendering/animations.js';
-import { bossMode, reapplyPermanentBuffs, showBuffSelection, exitBossMode, updateGameModeUI, initBossMode } from './game/bossMode.js';
+import { bossMode, reapplyPermanentBuffs, showBuffSelection, exitBossMode, updateGameModeUI, initBossMode, applyBossModeBuff } from './game/bossMode.js';
 import { buffTypes } from './constants.js';
 import { 
     p1, p2, tanks, boss, bullets, buffs, gameMode, 
@@ -34,22 +34,153 @@ export function toggleDevMode(val) {
     flashMsg(`Developer Mode ${devMode ? 'ON' : 'OFF'}`);
     const devHintEl = document.getElementById('devHint');
     if (devHintEl) devHintEl.style.display = devMode ? 'block' : 'none';
-    const devIns = document.getElementById('devInstructionsCard');
-    if (devIns) devIns.classList.toggle('hidden', !devMode);
+    applyDevModeLayoutClasses();
+    syncDevControlsUI();
     syncSettingsUI();
 }
 
 const fullscreenBtn = document.getElementById('fullscreenToggleBtn');
+const fullscreenBtnIcon = fullscreenBtn ? fullscreenBtn.querySelector('.fullscreen-btn__icon') : null;
+
+const devInstructionsCard = document.getElementById('devInstructionsCard');
+const gameWorkspace = document.querySelector('.game-workspace');
+const gameWrap = document.getElementById('gameWrap');
+const devPanelCloseBtn = devInstructionsCard ? devInstructionsCard.querySelector('.dev-card-close') : null;
+
+let devActionButtons = [];
+let devToggleButtons = [];
+let devBossBuffButtons = [];
+
+const devToggleKeyMap = {
+    god: {
+        key: 'g',
+        isActive: () => devGodMode
+    },
+    onehit: {
+        key: 'm',
+        isActive: () => devOneHitKill
+    },
+    walls: {
+        key: 'n',
+        isActive: () => devNoWalls
+    }
+};
+
+function applyDevModeLayoutClasses() {
+    if (devInstructionsCard) {
+        devInstructionsCard.classList.toggle('hidden', !devMode);
+    }
+    if (gameWorkspace) {
+        gameWorkspace.classList.toggle('dev-active', devMode);
+    }
+    if (gameWrap) {
+        gameWrap.classList.toggle('dev-active', devMode);
+    }
+}
+
+function syncDevControlsUI() {
+    if (!devInstructionsCard) return;
+
+    devToggleButtons.forEach(btn => {
+        const toggleId = btn.dataset.devToggle;
+        const config = devToggleKeyMap[toggleId];
+        if (!config || typeof config.isActive !== 'function') return;
+
+        const isOn = !!config.isActive();
+        btn.classList.toggle('is-on', isOn);
+        btn.classList.toggle('is-off', !isOn);
+        btn.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+
+        if (toggleId === 'walls') {
+            btn.title = isOn ? 'Phím tắt: N • Tường tắt' : 'Phím tắt: N • Tường bật';
+        }
+    });
+}
+
+function setupDevPanelButtons() {
+    if (!devInstructionsCard) return;
+
+    if (devPanelCloseBtn) {
+        devPanelCloseBtn.addEventListener('click', e => {
+            e.preventDefault();
+            toggleDevMode(false);
+            devPanelCloseBtn.blur();
+        });
+    }
+
+    devActionButtons = Array.from(devInstructionsCard.querySelectorAll('[data-dev-key]'));
+    devToggleButtons = Array.from(devInstructionsCard.querySelectorAll('[data-dev-toggle]'));
+    devBossBuffButtons = Array.from(devInstructionsCard.querySelectorAll('[data-dev-boss-buff]'));
+
+    devActionButtons.forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.preventDefault();
+            const actionKey = btn.getAttribute('data-dev-key');
+            if (!actionKey) return;
+            const handled = triggerDevAction(actionKey, { event: e });
+            if (handled) syncDevControlsUI();
+            btn.blur();
+        });
+    });
+
+    devToggleButtons.forEach(btn => {
+        const toggleId = btn.dataset.devToggle;
+        const config = devToggleKeyMap[toggleId];
+        if (!config) return;
+
+        btn.addEventListener('click', e => {
+            e.preventDefault();
+            const handled = triggerDevAction(config.key, { event: e });
+            if (handled) syncDevControlsUI();
+            btn.blur();
+        });
+    });
+
+    devBossBuffButtons.forEach(btn => {
+        const buffId = btn.getAttribute('data-dev-boss-buff');
+        if (!buffId) return;
+        btn.addEventListener('click', e => {
+            e.preventDefault();
+            handleDevBossBuff(buffId);
+            btn.blur();
+        });
+    });
+
+    syncDevControlsUI();
+}
+
+function handleDevBossBuff(buffId) {
+    if (!buffId) return;
+    if (gameMode !== 'vsboss') {
+        flashMsg('❌ Chỉ hoạt động trong VS Boss Mode');
+        return;
+    }
+
+    applyBossModeBuff(buffId);
+    if (!bossMode.permanentBuffs.includes(buffId)) {
+        bossMode.permanentBuffs.push(buffId);
+        flashMsg(`Boss buff: ${getBossBuffName(buffId)} +`);
+    } else {
+        flashMsg(`Boss buff: ${getBossBuffName(buffId)} đã kích hoạt`);
+    }
+}
 
 function updateFullscreenButton() {
     if (!fullscreenBtn) return;
     const isFull = !!document.fullscreenElement;
-    fullscreenBtn.textContent = isFull ? '❏' : '⛶';
-    fullscreenBtn.title = isFull ? 'Thoát toàn màn hình' : 'Toàn màn hình';
-    fullscreenBtn.setAttribute('aria-label', fullscreenBtn.title);
+    if (fullscreenBtnIcon) {
+        fullscreenBtnIcon.textContent = isFull ? '⤡' : '⤢';
+    } else {
+        fullscreenBtn.textContent = isFull ? '⤡' : '⤢';
+    }
+    const label = isFull ? 'Thoát toàn màn hình' : 'Toàn màn hình';
+    fullscreenBtn.title = label;
+    fullscreenBtn.setAttribute('aria-label', label);
+    fullscreenBtn.classList.toggle('is-active', isFull);
 }
 
 randomObstacles();
+setupDevPanelButtons();
 initSettings();
 initMenu();
 initCanvas();
@@ -131,7 +262,8 @@ function loop(now){
 }
 document.addEventListener('keydown', e=>{
     if (devMode) {
-        handleDevKeys(e);
+        const handled = handleDevKeys(e);
+        if (handled) syncDevControlsUI();
     }
 });
 

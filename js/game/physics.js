@@ -5,7 +5,69 @@ import { obstacles } from './obstacles.js';
 import { devNoWalls, tanks, gameMode, boss, p1, p2, p1FocusMode, p2FocusMode, enemySlowFactor } from '../state.js';
 import { flashMsg } from '../main.js';
 import { addExplosion } from '../rendering/animations.js';
-import { spawnShotSplitChildren } from '../utils/shotSplit.js';
+import { spawnShotSplitChildren, triggerShotSplit4 } from '../utils/shotSplit.js';
+
+// Ricochet tracking helper
+function findRicochetTarget(bullet) {
+    if (!bullet || !bullet.owner) return null;
+    const owner = bullet.owner;
+
+    // If owner is player, prioritize boss
+    if ((owner === p1 || owner === p2) && boss && boss.hp > 0) {
+        return boss;
+    }
+
+    // If owner is boss, look for alive players
+    if (owner === boss) {
+        const players = [p1, p2].filter(p => p && p.hp > 0 && !p.invisible);
+        if (players.length === 1) return players[0];
+        if (players.length === 2) {
+            const d1 = (players[0].x - bullet.x) ** 2 + (players[0].y - bullet.y) ** 2;
+            const d2 = (players[1].x - bullet.x) ** 2 + (players[1].y - bullet.y) ** 2;
+            return d1 <= d2 ? players[0] : players[1];
+        }
+    }
+
+    let closest = null;
+    let closestDist = Infinity;
+    for (const target of tanks) {
+        if (!target || target.hp <= 0 || target === owner || target.invisible) continue;
+        if ((owner === p1 || owner === p2) && (target === p1 || target === p2)) continue;
+        if (owner === boss && target === boss) continue;
+        const dx = target.x - bullet.x;
+        const dy = target.y - bullet.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq < closestDist) {
+            closest = target;
+            closestDist = distSq;
+        }
+    }
+    return closest;
+}
+
+function trackRicochet(bullet) {
+    if (!bullet || !bullet.hasRicochetTracking || bullet._ricochetTrackingConsumed) return;
+    const target = findRicochetTarget(bullet);
+    if (!target) return;
+    const speed = Math.hypot(bullet.vx, bullet.vy) || bullet.baseSpeed || 6.5;
+    const angle = Math.atan2(target.y - bullet.y, target.x - bullet.x);
+    bullet.vx = Math.cos(angle) * speed;
+    bullet.vy = Math.sin(angle) * speed;
+    bullet.prevX = bullet.x;
+    bullet.prevY = bullet.y;
+
+    if (!devNoWalls) {
+        const nudge = Math.max(1, bullet.r * 0.75);
+        let attempts = 0;
+        while (attempts < 6 && collidesAt(bullet.x, bullet.y, bullet.r)) {
+            bullet.x += Math.cos(angle) * nudge;
+            bullet.y += Math.sin(angle) * nudge;
+            attempts++;
+        }
+    }
+
+    bullet._ricochetTrackingConsumed = true;
+}
 
 function collidesAt(px, py, r) {
     if (devNoWalls) return false;
@@ -192,19 +254,28 @@ function bounceBullet(bullet, wall) {
     bullet.bounces++;
 
     if (bullet.bossBounceDamageFactor) {
-        const factor = bullet.bossBounceDamageFactor;
-        bullet.damage = Math.max(0.1, (bullet.damage || 1) * factor);
+        const factor = Math.max(0.9, Math.min(1, bullet.bossBounceDamageFactor));
+        const baseDamage = typeof bullet.bossBounceOriginalDamage === 'number'
+            ? bullet.bossBounceOriginalDamage
+            : (bullet.damage || 1);
+        bullet.damage = Math.max(0.1, baseDamage * factor);
         if (typeof bullet.bossBounceRemaining === 'number') {
             bullet.bossBounceRemaining--;
             if (bullet.bossBounceRemaining <= 0) {
                 delete bullet.bossBounceRemaining;
                 delete bullet.bossBounceDamageFactor;
+                delete bullet.bossBounceOriginalDamage;
             }
         }
+    }
+
+    if (bullet.hasRicochetTracking && !bullet._ricochetTrackingConsumed && bullet.bounces >= 1) {
+        trackRicochet(bullet);
     }
 }
 
 export function updateBulletPhysics(bullet) {
+    if (!bullet || !bullet.alive) return;
     const owner = bullet.owner;
     const isEnemyBullet = owner && owner !== p1 && owner !== p2;
     const slowFactor = isEnemyBullet ? (enemySlowFactor || 1) : 1;
@@ -281,19 +352,21 @@ export function updateBulletPhysics(bullet) {
     if (stepVy > 0 && bullet.prevY < H - bullet.r && newY >= H - bullet.r) { const t = (H - bullet.r - bullet.prevY) / stepVy; if (t < boundaryT) { boundaryT = t; hitBoundary = true; } }
 
     if (hitWall && minT < boundaryT) { // Đã va vào tường
-        // Xử lý xuyên tường cho buff của boss
-        if (bullet.isPiercing && typeof bullet.bossPierceRemaining === 'number' && bullet.bossPierceRemaining > 1) {
+        const hasBossBounce = typeof bullet.bossBounceRemaining === 'number' && bullet.bossBounceRemaining > 0;
+        const canPierceWall = bullet.isPiercing && typeof bullet.bossPierceRemaining === 'number' && bullet.bossPierceRemaining >= 1;
+
+        // Ưu tiên hiệu ứng nảy; chỉ cho phép xuyên tường nếu không còn lượt nảy
+        if (!hasBossBounce && canPierceWall) {
             if (bullet.hasShotSplit && !bullet._shotSplitConsumed) {
                 spawnShotSplitChildren(bullet);
                 bullet.alive = false;
                 return;
             }
-            bullet.bossPierceRemaining = 1; // Tiêu thụ lượt xuyên
-            bullet.isPiercing = false; // Ngừng xuyên sau khi trúng tường
-            bullet.bossPierceExhausted = true;
-            bullet.x = newX; // Tiếp tục bay
-            bullet.y = newY;
-            return; // Bỏ qua logic nảy/phá hủy
+            if (bullet.hasShotSplit4 && !bullet._shotSplit4Triggered) {
+                triggerShotSplit4(bullet);
+                bullet.alive = false;
+                return;
+            }
         }
 
         bullet.x = hitPoint.x;
@@ -304,11 +377,20 @@ export function updateBulletPhysics(bullet) {
             bullet.alive = false;
             return;
         }
+        if (bullet.hasShotSplit4 && !bullet._shotSplit4Triggered) {
+            triggerShotSplit4(bullet);
+            bullet.alive = false;
+            return;
+        }
+
         let remainingT = Math.max(0, (1 - minT) - 0.02);
         if (remainingT > 0.005) {
+            bullet.prevX = bullet.x;
+            bullet.prevY = bullet.y;
             bullet.x += bullet.vx * remainingT;
             bullet.y += bullet.vy * remainingT;
         }
+        return;
     } else if (hitBoundary) {
         bullet.x = bullet.prevX + (newX - bullet.prevX) * boundaryT;
         bullet.y = bullet.prevY + (newY - bullet.prevY) * boundaryT;
@@ -318,16 +400,26 @@ export function updateBulletPhysics(bullet) {
             bullet.alive = false;
             return;
         }
+        if (bullet.hasShotSplit4 && !bullet._shotSplit4Triggered) {
+            triggerShotSplit4(bullet);
+            bullet.alive = false;
+            return;
+        }
+
         let remainingT = Math.max(0, (1 - boundaryT) - 0.02);
         if (remainingT > 0.005) {
+            bullet.prevX = bullet.x;
+            bullet.prevY = bullet.y;
             bullet.x += bullet.vx * remainingT;
             bullet.y += bullet.vy * remainingT;
-            bullet.x = clamp(bullet.x, bullet.r, W - bullet.r);
-            bullet.y = clamp(bullet.y, bullet.r, H - bullet.r);
         }
+        bullet.x = clamp(bullet.x, bullet.r, W - bullet.r);
+        bullet.y = clamp(bullet.y, bullet.r, H - bullet.r);
+        return;
     } else {
         bullet.x = newX;
         bullet.y = newY;
+
         if (bullet.x < bullet.r || bullet.x > W - bullet.r || bullet.y < bullet.r || bullet.y > H - bullet.r) {
             bounceBullet(bullet);
             if (bullet.hasShotSplit && !bullet._shotSplitConsumed) {
@@ -335,8 +427,11 @@ export function updateBulletPhysics(bullet) {
                 bullet.alive = false;
                 return;
             }
-            bullet.x = clamp(bullet.x, bullet.r, W - bullet.r);
-            bullet.y = clamp(bullet.y, bullet.r, H - bullet.r);
+            if (bullet.hasShotSplit4 && !bullet._shotSplit4Triggered) {
+                triggerShotSplit4(bullet);
+                bullet.alive = false;
+                return;
+            }
         }
     }
 }

@@ -41,6 +41,8 @@ export default class Boss extends Tank {
         this.jumpDuration = 800; // 0.8s jump animation
 
         this.skillTimer = 0; // Timer for normal boss teleport
+
+        this.canPhase = true; // Cho phép boss đi xuyên vật thể
     }
     
     setupBossStats() {
@@ -65,7 +67,7 @@ export default class Boss extends Tank {
             case 'golem':
                 this.hp = 25;
                 this.maxHp = 25;
-                this.damage = 3;
+                this.damage = 1.5;
                 this.color = '#78716c';
                 this.moveSpeed = 0.035;
                 this.reload = 3500;
@@ -89,7 +91,7 @@ export default class Boss extends Tank {
             case 'treant':
                 this.hp = 30;
                 this.maxHp = 30;
-                this.damage = 3;
+                this.damage = 1.5;
                 this.color = '#16a34a';
                 this.moveSpeed = 0.04;
                 this.reload = 3200;
@@ -143,15 +145,61 @@ export default class Boss extends Tank {
 
         ctx.restore();
 
+        // Status visuals
+        ctx.save();
+        if (this.isBurning) {
+            const time = performance.now() * 0.02;
+            const pulse = 1 + Math.sin(time) * 0.1;
+            ctx.strokeStyle = 'rgba(255, 111, 0, 0.85)';
+            ctx.lineWidth = 5;
+            ctx.shadowColor = 'rgba(255, 80, 0, 0.7)';
+            ctx.shadowBlur = 15;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.r + 14 * pulse, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.shadowBlur = 0;
+            for (let i = 0; i < 6; i++) {
+                const angle = (i / 6) * Math.PI * 2 + time;
+                const sparkX = this.x + Math.cos(angle) * (this.r + 10 + Math.sin(time + i) * 4);
+                const sparkY = this.y + Math.sin(angle) * (this.r + 10 + Math.sin(time + i) * 4);
+                ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 184, 108, 0.9)' : 'rgba(255, 140, 64, 0.9)';
+                ctx.beginPath();
+                ctx.arc(sparkX, sparkY, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        if (this.isIceSlowed) {
+            const time = performance.now() * 0.015;
+            const shimmer = 1 + Math.sin(time * 2) * 0.05;
+            const gradient = ctx.createRadialGradient(this.x, this.y, this.r, this.x, this.y, this.r + 24 * shimmer);
+            gradient.addColorStop(0, 'rgba(99, 179, 237, 0.15)');
+            gradient.addColorStop(1, 'rgba(191, 219, 254, 0.65)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.r + 22 * shimmer, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = 'rgba(191, 219, 254, 0.8)';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([6, 6]);
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.r + 10, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        ctx.restore();
+
         // Ultra Modern Boss Health Bar
         this.drawModernHealthBar(ctx);
     }
     
-drawModernHealthBar(ctx) {
-    const barW = 600, barH = 22;
-    const x = (W - barW) / 2, y = 34; // Đẩy lên cao hơn một chút
-    const hpPerc = this.hp / this.maxHp;
-    const time = performance.now() * 0.002;
+    drawModernHealthBar(ctx) {
+        const barW = 600, barH = 22;
+        const x = (W - barW) / 2, y = 34; // Đẩy lên cao hơn một chút
+        const hpPerc = this.hp / this.maxHp;
+        const time = performance.now() * 0.002;
 
     // Get boss colors
     let primaryColor, secondaryColor, accentColor, bossName, bossIcon;

@@ -24,42 +24,119 @@
 
     /* --- Buff Selection & Game Over Card Styles --- */
     .buff-card, .boss-gameover-btn {
-        background: radial-gradient(circle, rgba(49, 46, 129, 0.7) 0%, rgba(30, 27, 75, 0.9) 100%);
-        border: 2px solid rgba(139, 92, 246, 0.3);
+        --card-bg: radial-gradient(circle, rgba(49, 46, 129, 0.7) 0%, rgba(30, 27, 75, 0.9) 100%);
+        --card-border: rgba(139, 92, 246, 0.3);
+        --card-border-hover: rgba(196, 181, 253, 0.8);
+        --card-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+        --card-shadow-hover: 0 10px 30px rgba(139, 92, 246, 0.4);
+        --rarity-color: #c4b5fd;
+        --key-color: #e0e7ff;
+        background: var(--card-bg);
+        border: 2px solid var(--card-border);
         border-radius: 12px;
         padding: 24px;
         text-align: center;
         cursor: pointer;
-        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, filter 0.2s ease;
         min-width: 180px;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+        box-shadow: var(--card-shadow);
     }
 
     .buff-card:hover, .boss-gameover-btn:hover {
         transform: translateY(-8px);
-        border-color: rgba(196, 181, 253, 0.8);
-        box-shadow: 0 10px 30px rgba(139, 92, 246, 0.4);
+        border-color: var(--card-border-hover);
+        box-shadow: var(--card-shadow-hover);
+        filter: brightness(1.05);
+    }
+
+    .buff-card__rarity {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--rarity-color);
+        margin-bottom: 10px;
     }
 
     .buff-card__key {
         font-size: 32px;
-        font-weight: bold;
-        color: #c4b5fd;
+        font-weight: 800;
+        color: var(--key-color);
         margin-bottom: 12px;
-        text-shadow: 0 0 10px rgba(196, 181, 253, 0.5);
+        text-shadow: 0 0 10px rgba(255, 255, 255, 0.25);
     }
 
     .buff-card__title {
-        font-weight: bold;
-        color: #f5d0fe;
+        font-weight: 700;
+        color: #fdf4ff;
         margin-bottom: 8px;
         font-size: 18px;
     }
 
     .buff-card__desc {
         font-size: 13px;
-        color: #d8b4fe;
-        line-height: 1.4;
+        color: rgba(248, 250, 252, 0.8);
+        line-height: 1.45;
+    }
+
+    .buff-card--common {
+        --card-bg: linear-gradient(140deg, #4b5563, #1f2937);
+        --card-border: rgba(148, 163, 184, 0.8);
+        --card-border-hover: rgba(226, 232, 240, 0.95);
+        --card-shadow: 0 18px 28px rgba(15, 23, 42, 0.4);
+        --card-shadow-hover: 0 28px 45px rgba(15, 23, 42, 0.55);
+        --rarity-color: #e2e8f0;
+        --key-color: #f8fafc;
+    }
+
+    .buff-card--uncommon {
+        --card-bg: linear-gradient(140deg, #14532d, #065f46);
+        --card-border: rgba(74, 222, 128, 0.8);
+        --card-border-hover: rgba(134, 239, 172, 0.95);
+        --card-shadow: 0 18px 32px rgba(6, 95, 70, 0.45);
+        --card-shadow-hover: 0 30px 50px rgba(16, 185, 129, 0.5);
+        --rarity-color: #bbf7d0;
+        --key-color: #dcfce7;
+    }
+
+    .buff-card--rare {
+        --card-bg: linear-gradient(140deg, #0f172a, #1d4ed8);
+        --card-border: rgba(96, 165, 250, 0.95);
+        --card-border-hover: rgba(147, 197, 253, 0.98);
+        --card-shadow: 0 20px 36px rgba(15, 23, 42, 0.55);
+        --card-shadow-hover: 0 36px 60px rgba(37, 99, 235, 0.6);
+        --rarity-color: #bfdbfe;
+        --key-color: #dbeafe;
+    }
+
+    .buff-card--epic {
+        --card-bg: linear-gradient(140deg, #5b21b6, #7c3aed);
+        --card-border: rgba(196, 181, 253, 0.8);
+        --card-border-hover: rgba(233, 213, 255, 0.95);
+        --card-shadow: 0 18px 32px rgba(91, 33, 182, 0.55);
+        --card-shadow-hover: 0 30px 50px rgba(167, 139, 250, 0.6);
+        --rarity-color: #e9d5ff;
+        --key-color: #f5f3ff;
+    }
+
+    .buff-card--legendary {
+        --card-bg: linear-gradient(140deg, #854d0e, #ca8a04);
+        --card-border: rgba(252, 211, 77, 0.85);
+        --card-border-hover: rgba(253, 224, 71, 0.95);
+        --card-shadow: 0 18px 32px rgba(120, 53, 15, 0.55);
+        --card-shadow-hover: 0 34px 55px rgba(234, 179, 8, 0.6);
+        --rarity-color: #fef3c7;
+        --key-color: #fffbeb;
+    }
+
+    .buff-card--mythical {
+        --card-bg: linear-gradient(145deg, #7f1d1d, #dc2626);
+        --card-border: rgba(248, 113, 113, 0.85);
+        --card-border-hover: rgba(248, 150, 150, 0.95);
+        --card-shadow: 0 20px 34px rgba(127, 29, 29, 0.55);
+        --card-shadow-hover: 0 36px 58px rgba(239, 68, 68, 0.62);
+        --rarity-color: #fee2e2;
+        --key-color: #fff7ed;
     }
 
     .boss-gameover-overlay {
@@ -70,35 +147,6 @@
     .boss-gameover-card {
         text-align: center;
         animation: fadeIn-scaleUp 0.5s ease-out forwards;
-    }
-
-    .boss-gameover-orb {
-        font-size: 80px;
-        line-height: 1;
-        color: #ef4444;
-        margin: 0 auto 20px;
-        text-shadow: 0 0 25px #ef4444;
-        animation: pulse-red 2s infinite;
-    }
-
-    @keyframes pulse-red {
-        0% { transform: scale(0.95); text-shadow: 0 0 25px #ef4444; }
-        70% { transform: scale(1); text-shadow: 0 0 40px #ff6b6b; }
-        100% { transform: scale(0.95); text-shadow: 0 0 25px #ef4444; }
-    }
-
-    @keyframes fadeIn-scaleUp {
-        from { opacity: 0; transform: scale(0.9); }
-        to { opacity: 1; transform: scale(1); }
-    }
-
-    .boss-gameover-title {
-        font-size: 64px; 
-        color: #fecaca; 
-        margin-bottom: 40px; 
-        text-shadow: 0 0 15px #ef4444, 0 0 5px #fff;
-        font-weight: 900;
-        letter-spacing: 2px;
     }
 
     .boss-gameover-options {
@@ -114,7 +162,8 @@
 </style>
 </head>
 <body>
-<div class="glow a"></div><div class="glow b"></div>
+<div class="glow a"></div>
+<div class="glow b"></div>
 <div id="gameWrap">
 <header class="card">
 <div>
@@ -188,143 +237,190 @@
     </div>
 </section>
 <!-- Game canvas container -->
-<div class="game-container">
-    <canvas id="c" width="900" height="560"></canvas>
-    <!-- Settings Overlay -->
-    <section id="settingsPanel" class="overlay-panel hidden" aria-label="Cài đặt">
-        <div class="overlay-panel__content">
-        <div class="card settings" style="position:relative;">
-            <button class="settings-close-x" id="settingsCloseX">×</button>
-            <div class="settings-header">
-                <h4>Cài đặt</h4>
-                <p>Điều chỉnh Developer Mode, hiển thị và thông số gameplay.</p>
+<div class="game-workspace">
+    <div class="game-canvas-wrap">
+        <div class="game-container">
+            <canvas id="c" width="900" height="560"></canvas>
+            <!-- Settings Overlay -->
+            <section id="settingsPanel" class="overlay-panel hidden" aria-label="Cài đặt">
+                <div class="overlay-panel__content">
+                    <div class="card settings">
+                        <button class="settings-close-x" id="settingsCloseX">×</button>
+                        <div class="settings-header">
+                            <h4>Cài đặt</h4>
+                            <p>Điều chỉnh Developer Mode, hiển thị và thông số gameplay.</p>
+                        </div>
+                        <div class="settings-grid">
+                            <div class="settings-group">
+                                <div class="settings-title">Tùy chọn</div>
+                                <div class="settings-row">
+                                    <label><input type="checkbox" id="settingsDevMode"> Developer Mode</label>
+                                </div>
+                                <div class="settings-row">
+                                    <label><input type="checkbox" id="settingsInstructions" checked> Hiển thị hướng dẫn</label>
+                                </div>
+                                <div class="settings-row">
+                                    <label><input type="checkbox" id="settingsP1Focus"> P1 Khóa mục tiêu</label>
+                                </div>
+                                <div class="settings-row">
+                                    <label><input type="checkbox" id="settingsP2Focus"> P2 Khóa mục tiêu</label>
+                                </div>
+                            </div>
+                            <div class="settings-group" id="settingsStatsGroup">
+                                <div class="settings-title">Thông số</div>
+                                <div class="settings-row">
+                                    <span>Max HP</span>
+                                    <input id="settingsMaxHp" class="settings-input" type="number" step="0.1" min="0.1" value="3">
+                                </div>
+                                <div class="settings-row">
+                                    <span>Tốc độ</span>
+                                    <input id="settingsSpeed" class="settings-input" type="number" step="0.01" min="0.01" value="0.5">
+                                </div>
+                                <div class="settings-row">
+                                    <span>Số đạn tối đa</span>
+                                    <input id="settingsAmmo" class="settings-input" type="number" step="1" min="1" value="3">
+
+                                </div>
+                                <div class="settings-row">
+                                    <span>Thời gian nạp đạn (ms)</span>
+                                    <input id="settingsReload" class="settings-input" type="number" step="10" min="0" value="320">
+
+                                </div>
+                                <div class="settings-row">
+                                    <span>Tốc độ quay</span>
+                                    <input id="settingsTurnSpeed" class="settings-input" type="number" step="0.01" min="0.01" value="0.06">
+
+                                </div>
+                                <div class="settings-row">
+                                    <span>Ma sát</span>
+                                    <input id="settingsFriction" class="settings-input" type="number" step="0.01" min="0.01" max="1" value="0.93">
+
+                                </div>
+                                <div class="settings-row">
+                                    <span>Tốc độ hồi đạn</span>
+                                    <input id="settingsReloadRate" class="settings-input" type="number" step="0.001" min="0.001" value="0.0167">
+
+                                </div>
+                            </div>
+                            <div class="settings-group">
+                                <div class="settings-title">VS Boss Mode</div>
+                                <div class="settings-actions">
+                                    <button class="btn" id="bossModeBtn2P">2 Players VS Boss</button>
+                                    <button class="btn" id="exitBossModeBtn" style="margin-top: 10px; --btn-from: #ff4757; --btn-to: #ff3742; --btn-shadow: rgba(255,71,87,0.3); display: none;">Exit Boss Mode</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <!-- Main Menu Overlay -->
+            <div id="mainMenuOverlay" class="main-menu-overlay">
+                <div class="main-menu-container">
+                    <h1 class="main-menu-title">Ngạo nghễ Kaguyacon</h1>
+                    <p class="main-menu-subtitle">Đế vương phải có long ngai</p>
+                    
+                    <div class="main-menu-buttons">
+                        <button class="menu-btn menu-btn-primary" id="menuBtnPvP">Player vs Player</button>
+                        
+                        <button class="menu-btn menu-btn-boss" id="menuBtnBoss">VS Boss Mode</button>
+                        
+                        <button class="menu-btn menu-btn-settings" id="menuBtnSettings">Settings</button>
+                    </div>
+                    
+                    <div class="menu-version">Version 2.0.0</div>
+                </div>
             </div>
-        <div class="settings-grid">
-            <div class="settings-group">
-                <div class="settings-title">Tùy chọn</div>
-                <div class="settings-row">
-                    <label><input type="checkbox" id="settingsDevMode"> Developer Mode</label>
-                </div>
-                <div class="settings-row">
-                    <label><input type="checkbox" id="settingsInstructions" checked> Hiển thị hướng dẫn</label>
-                </div>
-                <div class="settings-row">
-                    <label><input type="checkbox" id="settingsP1Focus"> P1 Khóa mục tiêu</label>
-                </div>
-                <div class="settings-row">
-                    <label><input type="checkbox" id="settingsP2Focus"> P2 Khóa mục tiêu</label>
-                </div>
-            </div>
-            <div class="settings-group" id="settingsStatsGroup">
-                <div class="settings-title">Thông số</div>
-                <div class="settings-row">
-                    <span>Max HP</span>
-                    <input id="settingsMaxHp" class="settings-input" type="number" step="0.1" min="0.1" value="3">
-                </div>
-                <div class="settings-row">
-                    <span>Tốc độ</span>
-                    <input id="settingsSpeed" class="settings-input" type="number" step="0.01" min="0.01" value="0.5">
-                </div>
-                <div class="settings-row">
-                    <span>Số đạn tối đa</span>
-                    <input id="settingsAmmo" class="settings-input" type="number" step="1" min="1" value="3">
-
-                </div>
-                <div class="settings-row">
-                    <span>Thời gian nạp đạn (ms)</span>
-                    <input id="settingsReload" class="settings-input" type="number" step="10" min="0" value="320">
-
-                </div>
-                <div class="settings-row">
-                    <span>Tốc độ quay</span>
-                    <input id="settingsTurnSpeed" class="settings-input" type="number" step="0.01" min="0.01" value="0.06">
-
-                </div>
-                <div class="settings-row">
-                    <span>Ma sát</span>
-                    <input id="settingsFriction" class="settings-input" type="number" step="0.01" min="0.01" max="1" value="0.93">
-
-                </div>
-                <div class="settings-row">
-                    <span>Tốc độ hồi đạn</span>
-                    <input id="settingsReloadRate" class="settings-input" type="number" step="0.001" min="0.001" value="0.0167">
-
-                </div>
-            </div>
-            <div class="settings-group">
-                <div class="settings-title">VS Boss Mode</div>
-                <div class="settings-actions">
-                    <button class="btn" id="bossModeBtn2P">2 Players VS Boss</button>
-                    <button class="btn" id="exitBossModeBtn" style="margin-top: 10px; --btn-from: #ff4757; --btn-to: #ff3742; --btn-shadow: rgba(255,71,87,0.3); display: none;">Exit Boss Mode</button>
-                </div>
-            </div>
-        </div>
-        </div>
-        </div>
-    </section>
-    <!-- Main Menu Overlay -->
-    <div id="mainMenuOverlay" class="main-menu-overlay">
-        <div class="main-menu-container">
-            <h1 class="main-menu-title">Ngạo nghễ Kaguyacon</h1>
-            <p class="main-menu-subtitle">Đế vương phải có long ngai</p>
             
-            <div class="main-menu-buttons">
-                <button class="menu-btn menu-btn-primary" id="menuBtnPvP">Player vs Player</button>
-                
-                <button class="menu-btn menu-btn-boss" id="menuBtnBoss">VS Boss Mode</button>
-                
-                <button class="menu-btn menu-btn-settings" id="menuBtnSettings">Settings</button>
-            </div>
-            
-            <div class="menu-version">Version 2.0.0</div>
+            <!-- Game UI will be drawn on canvas -->
         </div>
+        <button id="fullscreenToggleBtn" class="btn-fullscreen" aria-label="Toàn màn hình" title="Toàn màn hình">
+            <span class="btn-fullscreen__glow" aria-hidden="true"></span>
+            <span class="btn-fullscreen__icon-wrap" aria-hidden="true">
+                <span class="fullscreen-btn__icon">⤢</span>
+            </span>
+        </button>
     </div>
-    
-    <!-- Game UI will be drawn on canvas -->
-</div>
-<button id="fullscreenToggleBtn" class="fullscreen-btn" aria-label="Toàn màn hình" title="Toàn màn hình" style="position: absolute; bottom: 10px; right: 10px;"><span class="fullscreen-btn__icon">⛶</span></button>
-<div id="devInstructionsCard" class="card hidden" style="position: absolute; top: 60px; right: 10px; width: 280px; max-height: 450px; overflow-y: auto; z-index: 100; padding: 15px; background: rgba(20, 30, 45, 0.9); border: 1px solid #4a5568;">
-    <h3 style="margin-top: 0; color: #ffd700; border-bottom: 1px solid #4a5568; padding-bottom: 8px;">Dev Mode Keys</h3>
-    <div style="display: grid; grid-template-columns: auto 1fr; gap: 5px 15px; font-size: 13px;">
-        <strong style="color: #a0aec0;">H:</strong> <span style="color: #e2e8f0;">Hồi đầy HP</span>
-        <strong style="color: #a0aec0;">O:</strong> <span style="color: #e2e8f0;">Reset ván đấu</span>
-        <strong style="color: #a0aec0;">G:</strong> <span style="color: #e2e8f0;">Bật/Tắt Bất tử</span>
-        <strong style="color: #a0aec0;">M:</strong> <span style="color: #e2e8f0;">Bật/Tắt 1-Hit Kill</span>
-        <strong style="color: #a0aec0;">N:</strong> <span style="color: #e2e8f0;">Bật/Tắt Tường</span>
-        <strong style="color: #a0aec0;">F:</strong> <span style="color: #e2e8f0;">Nạp đạn siêu nhanh</span>
-        <strong style="color: #a0aec0;">B:</strong> <span style="color: #e2e8f0;">Tạo 1 viên đạn</span>
-        
-        <h4 style="grid-column: 1 / -1; color: #63b3ed; margin: 10px 0 5px;">Tạo Buff:</h4>
-        <strong style="color: #a0aec0;">Z:</strong> <span style="color: #e2e8f0;">Hồi máu</span>
-        <strong style="color: #a0aec0;">C:</strong> <span style="color: #e2e8f0;">Đạn tự dẫn</span>
-        <strong style="color: #a0aec0;">V:</strong> <span style="color: #e2e8f0;">Tàng hình</span>
-        <strong style="color: #a0aec0;">2:</strong> <span style="color: #e2e8f0;">Tăng tốc</span>
-        <strong style="color: #a0aec0;">5:</strong> <span style="color: #e2e8f0;">Thu nhỏ</span>
-        <strong style="color: #a0aec0;">6:</strong> <span style="color: #e2e8f0;">Khiên</span>
-        <strong style="color: #a0aec0;">7:</strong> <span style="color: #e2e8f0;">Nạp nhanh</span>
-        <strong style="color: #a0aec0;">8:</strong> <span style="color: #e2e8f0;">Đạn to</span>
-        <strong style="color: #a0aec0;">9:</strong> <span style="color: #e2e8f0;">Phân thân</span>
-        <strong style="color: #a0aec0;">0:</strong> <span style="color: #e2e8f0;">Bắn chùm</span>
-        <strong style="color: #a0aec0;">Q:</strong> <span style="color: #e2e8f0;">Nảy vô hạn</span>
-        <strong style="color: #a0aec0;">R:</strong> <span style="color: #e2e8f0;">Đạn nổ</span>
-        <strong style="color: #a0aec0;">U:</strong> <span style="color: #e2e8f0;">Đạn xuyên</span>
-        <strong style="color: #a0aec0;">I:</strong> <span style="color: #e2e8f0;">Đạn độc</span>
-        <strong style="color: #a0aec0;">J:</strong> <span style="color: #e2e8f0;">Dung nham</span>
-        <strong style="color: #a0aec0;">X:</strong> <span style="color: #e2e8f0;">Cuồng nộ</span>
-        <strong style="color: #a0aec0;">P:</strong> <span style="color: #e2e8f0;">Bom nguyên tử</span>
-        
-        <h4 style="grid-column: 1 / -1; color: #f6ad55; margin: 10px 0 5px;">Tạo Debuff:</h4>
-        <strong style="color: #a0aec0;">Y:</strong> <span style="color: #e2e8f0;">Kẻ địch khổng lồ</span>
-        <strong style="color: #a0aec0;">E:</strong> <span style="color: #e2e8f0;">Đảo phím</span>
-        <strong style="color: #a0aec0;">T:</strong> <span style="color: #e2e8f0;">Trói chân</span>
-        <strong style="color: #a0aec0;">K:</strong> <span style="color: #e2e8f0;">Câm lặng</span>
-        <strong style="color: #a0aec0;">L:</strong> <span style="color: #e2e8f0;">Thôi miên</span>
+    <aside id="devInstructionsCard" class="card hidden dev-panel">
+        <button class="settings-close-x dev-card-close">×</button>
+        <h3 class="dev-card-title">Dev Mode Tools</h3>
+        <p class="dev-card-desc">Bấm nút để bật/tắt hoặc kích hoạt chức năng, không cần nhớ phím tắt.</p>
 
-        <h4 style="grid-column: 1 / -1; color: #f56565; margin: 10px 0 5px;">Test Boss Mode:</h4>
-        <strong style="color: #a0aec0;">1:</strong> <span style="color: #e2e8f0;">Thêm tất cả buff</span>
-        <strong style="color: #a0aec0;">3:</strong> <span style="color: #e2e8f0;">Xóa tất cả buff</span>
-    </div>
-    <button class="settings-close-x" style="top: 12px; right: 12px;">×</button>
+        <div class="dev-section">
+            <h4>Chế độ bật/tắt</h4>
+            <div class="dev-button-grid">
+                <button class="dev-toggle-btn" data-dev-toggle="god" title="Phím tắt: G">🛡️ Bất tử</button>
+                <button class="dev-toggle-btn" data-dev-toggle="onehit" title="Phím tắt: M">⚔️ 1 Hit Kill</button>
+                <button class="dev-toggle-btn" data-dev-toggle="walls" title="Phím tắt: N">🧱 Tường</button>
+            </div>
+        </div>
+
+        <div class="dev-section">
+            <h4>Hành động nhanh</h4>
+            <div class="dev-button-grid">
+                <button class="dev-action-btn" data-dev-key="h">❤️ Hồi đầy HP</button>
+                <button class="dev-action-btn" data-dev-key="o">🔁 Reset ván đấu</button>
+                <button class="dev-action-btn" data-dev-key="f">⚡ Nạp siêu nhanh</button>
+                <button class="dev-action-btn" data-dev-key="b">🔫 Tạo 1 viên đạn</button>
+            </div>
+        </div>
+
+        <div class="dev-section">
+            <h4>Spawn Buff / Debuff</h4>
+            <div class="dev-button-grid dev-button-grid--compact">
+                <button class="dev-action-btn" data-dev-key="z">💊 Hồi máu</button>
+                <button class="dev-action-btn" data-dev-key="2">🏃 Tăng tốc</button>
+                <button class="dev-action-btn" data-dev-key="c">🎯 Đạn tự dẫn</button>
+                <button class="dev-action-btn" data-dev-key="v">🕵️‍♂️ Tàng hình</button>
+                <button class="dev-action-btn" data-dev-key="5">📏 Thu nhỏ</button>
+                <button class="dev-action-btn" data-dev-key="6">🛡️ Khiên</button>
+                <button class="dev-action-btn" data-dev-key="7">🔄 Nạp nhanh</button>
+                <button class="dev-action-btn" data-dev-key="8">🪖 Đạn to</button>
+                <button class="dev-action-btn" data-dev-key="9">👥 Phân thân</button>
+                <button class="dev-action-btn" data-dev-key="0">🔫 Bắn chùm</button>
+                <button class="dev-action-btn" data-dev-key="q">↺ Nảy vô hạn</button>
+                <button class="dev-action-btn" data-dev-key="r">💥 Đạn nổ</button>
+                <button class="dev-action-btn" data-dev-key="u">⤫ Đạn xuyên</button>
+                <button class="dev-action-btn" data-dev-key="i">☠️ Đạn độc</button>
+                <button class="dev-action-btn" data-dev-key="p">☢️ Bom nguyên tử</button>
+                <button class="dev-action-btn" data-dev-key="j">🌋 Dung nham</button>
+                <button class="dev-action-btn" data-dev-key="x">🔥 Cuồng nộ</button>
+                <button class="dev-action-btn" data-dev-key="y">🪨 Địch khổng lồ</button>
+                <button class="dev-action-btn" data-dev-key="e">🔁 Đảo phím</button>
+                <button class="dev-action-btn" data-dev-key="t">⛓️ Trói chân</button>
+                <button class="dev-action-btn" data-dev-key="k">🤐 Câm lặng</button>
+                <button class="dev-action-btn" data-dev-key="l">🌀 Thôi miên</button>
+            </div>
+        </div>
+
+        <div class="dev-section">
+            <h4>Boss Buffs (Dev)</h4>
+            <div class="dev-button-grid dev-button-grid--compact">
+                <button class="dev-action-btn dev-boss-buff-btn" data-dev-boss-buff="lifeSteal">🧛 Hút máu</button>
+                <button class="dev-action-btn dev-boss-buff-btn" data-dev-boss-buff="bounceShot">↺ Nảy</button>
+                <button class="dev-action-btn dev-boss-buff-btn" data-dev-boss-buff="bossPierce">⤫ Xuyên</button>
+                <button class="dev-action-btn dev-boss-buff-btn" data-dev-boss-buff="bossFireRate">⚡ Tốc bắn</button>
+                <button class="dev-action-btn dev-boss-buff-btn" data-dev-boss-buff="bossMoveSpeed">🏃 Di chuyển</button>
+                <button class="dev-action-btn dev-boss-buff-btn" data-dev-boss-buff="twinShot">✦ Twin Shot</button>
+                <button class="dev-action-btn dev-boss-buff-btn" data-dev-boss-buff="magnetSmall">🧲 Hút nhỏ</button>
+                <button class="dev-action-btn dev-boss-buff-btn" data-dev-boss-buff="shotSplit">⚛️ Tách đạn</button>
+                <button class="dev-action-btn dev-boss-buff-btn" data-dev-boss-buff="shotSplit4">⚛️×4 Chia 4</button>
+                <button class="dev-action-btn dev-boss-buff-btn" data-dev-boss-buff="ricochetTracking">🎯 Ricochet Tracking</button>
+                <button class="dev-action-btn dev-boss-buff-btn" data-dev-boss-buff="poisonShot">☠️ Poison Shot</button>
+                <button class="dev-action-btn dev-boss-buff-btn" data-dev-boss-buff="microShield">🧿 MicroShield</button>
+                <button class="dev-action-btn dev-boss-buff-btn" data-dev-boss-buff="slowMotion10">🐢 Chậm 20%</button>
+                <button class="dev-action-btn dev-boss-buff-btn" data-dev-boss-buff="fireIceShot">🔥❄️ Đạn Hỏa/Băng</button>
+                <button class="dev-action-btn dev-boss-buff-btn" data-dev-boss-buff="criticalHit">💥 Chí mạng</button>
+            </div>
+        </div>
+
+        <div class="dev-section">
+            <h4>Test Boss Mode</h4>
+            <div class="dev-button-grid">
+                <button class="dev-action-btn" data-dev-key="1">✨ Thêm tất cả buff</button>
+                <button class="dev-action-btn" data-dev-key="3">🧹 Xóa tất cả buff</button>
+            </div>
+        </div>
+    </aside>
 </div>
 
 <!-- Instructions Panel at bottom -->
@@ -396,158 +492,7 @@
     </div></div>
 
 <script type="module" src="js/main.js"></script>
-<script>
-    // --- Draggable Dev Instructions Panel ---
-    const panel = document.getElementById('devInstructionsCard');
-    const header = panel.querySelector('h3');
 
-    // --- Close Button Logic ---
-    const closeBtn = panel.querySelector('.settings-close-x');
-    if (closeBtn) {
-        closeBtn.addEventListener('click', () => panel.classList.add('hidden'));
-    }
-
-    // --- Dragging Logic ---
-    let isDragging = false;
-    let offsetX, offsetY;
-
-    if (header) {
-        header.style.cursor = 'move';
-        header.style.userSelect = 'none';
-
-        header.addEventListener('mousedown', (e) => {
-            if (e.target !== header) return; // Only drag if mousedown is on the header itself
-            isDragging = true;
-            
-            // Calculate offset from the top-left corner of the panel
-            offsetX = e.clientX - panel.offsetLeft;
-            offsetY = e.clientY - panel.offsetTop;
-
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', onMouseUp);
-        });
-    }
-
-    function onMouseMove(e) {
-        if (!isDragging) return;
-
-        // Calculate new position
-        let newX = e.clientX - offsetX;
-        let newY = e.clientY - offsetY;
-
-        panel.style.left = `${newX}px`;
-        panel.style.top = `${newY}px`;
-    }
-
-    function onMouseUp() {
-        isDragging = false;
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
-    }
-
-    // --- Resizing Logic ---
-    let isResizing = false;
-    let resizeDirections = { top: false, right: false, bottom: false, left: false };
-    let startX, startY, startWidth, startHeight, startLeft, startTop;
-    const borderZone = 8; // 8px area around the edges for resizing
-
-    panel.addEventListener('mousemove', (e) => {
-        if (isResizing || isDragging) return;
-
-        const rect = panel.getBoundingClientRect();
-        const onLeft = Math.abs(e.clientX - rect.left) < borderZone;
-        const onRight = Math.abs(e.clientX - rect.right) < borderZone;
-        const onTop = Math.abs(e.clientY - rect.top) < borderZone;
-        const onBottom = Math.abs(e.clientY - rect.bottom) < borderZone;
-
-        if ((onTop && onLeft) || (onBottom && onRight)) {
-            panel.style.cursor = 'nwse-resize';
-        } else if ((onTop && onRight) || (onBottom && onLeft)) {
-            panel.style.cursor = 'nesw-resize';
-        } else if (onTop || onBottom) {
-            panel.style.cursor = 'ns-resize';
-        } else if (onLeft || onRight) {
-            panel.style.cursor = 'ew-resize';
-        } else {
-            panel.style.cursor = 'default';
-        }
-    });
-
-    panel.addEventListener('mousedown', (e) => {
-        // Prevent resizing when clicking the header or close button
-        if (e.target === header || e.target === closeBtn) return;
-
-        const rect = panel.getBoundingClientRect();
-        resizeDirections.top = Math.abs(e.clientY - rect.top) < borderZone;
-        resizeDirections.bottom = Math.abs(e.clientY - rect.bottom) < borderZone;
-        resizeDirections.left = Math.abs(e.clientX - rect.left) < borderZone;
-        resizeDirections.right = Math.abs(e.clientX - rect.right) < borderZone;
-
-        if (Object.values(resizeDirections).some(dir => dir)) {
-            isResizing = true;
-            e.preventDefault();
-
-            startX = e.clientX;
-            startY = e.clientY;
-            startWidth = panel.offsetWidth;
-            startHeight = panel.offsetHeight;
-            startLeft = panel.offsetLeft;
-            startTop = panel.offsetTop;
-
-            document.addEventListener('mousemove', handleResizeMove);
-            document.addEventListener('mouseup', handleResizeUp);
-        }
-    });
-
-    function handleResizeMove(e) {
-        if (!isResizing) return;
-
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-
-        if (resizeDirections.right) {
-            panel.style.width = `${startWidth + dx}px`;
-        }
-        if (resizeDirections.bottom) {
-            panel.style.height = `${startHeight + dy}px`;
-        }
-        if (resizeDirections.left) {
-            panel.style.width = `${startWidth - dx}px`;
-            panel.style.left = `${startLeft + dx}px`;
-        }
-        if (resizeDirections.top) {
-            panel.style.height = `${startHeight - dy}px`;
-            panel.style.top = `${startTop + dy}px`;
-        }
-    }
-
-    function handleResizeUp() {
-        isResizing = false;
-        resizeDirections = { top: false, right: false, bottom: false, left: false };
-        document.removeEventListener('mousemove', handleResizeMove);
-        document.removeEventListener('mouseup', handleResizeUp);
-    }
-
-    // --- Click outside to close settings panel ---
-    const settingsPanel = document.getElementById('settingsPanel');
-    if (settingsPanel) {
-        settingsPanel.addEventListener('click', (e) => {
-            // If the click is on the overlay itself (the background), close the panel.
-            if (e.target === settingsPanel) {
-                settingsPanel.classList.add('hidden');
-            }
-        });
-    }
-
-    // --- Close Instructions Panel ---
-    const instructionsPanel = document.getElementById('instructionsPanel');
-    const instructionsCloseBtn = document.getElementById('instructionsCloseX');
-    if (instructionsPanel && instructionsCloseBtn) {
-        instructionsCloseBtn.addEventListener('click', () => {
-            instructionsPanel.classList.add('hidden');
-        });
-    }
-</script>
 </div>
 </div>
 </body>

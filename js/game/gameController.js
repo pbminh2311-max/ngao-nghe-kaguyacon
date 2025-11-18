@@ -22,13 +22,18 @@ import { showStatus, applyPoisonEffect, applyEffect, tagEffect } from '../system
 import { BuffFactory } from '../systems/buffs.js';
 import { bossMode, exitBossMode, showBuffSelection, reapplyPermanentBuffs, applyBossModeBuff, showBossGameOver } from './bossMode.js';
 import { buffTypes } from '../constants.js';
-import { spawnShotSplitChildren } from '../utils/shotSplit.js';
+import { spawnShotSplitChildren, triggerShotSplit4 } from '../utils/shotSplit.js';
 import { applyStatSettings, syncSettingsUI } from '../ui/settings.js';
 
 const FIRE_BURN_DURATION = 2000;
 const FIRE_BURN_RATIO = 0.5;
 const ICE_SLOW_DURATION = 2500;
 const ICE_SLOW_MULTIPLIER = 0.7;
+const POISON_SHOT_BASE_DURATION = 3000;
+const POISON_SHOT_BASE_RATIO = 0.2;
+const POISON_SHOT_STACK_DURATION = 1000;
+const POISON_SHOT_STACK_RATIO = 0.1;
+const POISON_SHOT_MAX_STACK = 3;
 
 function applyFireShotEffect(target, baseDamage) {
     if (!target) return;
@@ -39,38 +44,43 @@ function applyFireShotEffect(target, baseDamage) {
         state => {
             state.burnPerMs = burnPerMs;
             state.elapsed = 0;
-            if (target === p1 || target === p2) target.isBurning = true;
+            target.isBurning = true;
         },
         () => {
-            if (target === p1 || target === p2) target.isBurning = false;
+            target.isBurning = false;
         },
         (dt, tank, state) => {
             if (!state || state.cancelled || dt <= 0) return;
             const isPlayer = (tank === p1 || tank === p2);
             if (devGodMode && isPlayer) return;
-            const damage = state.burnPerMs * dt;
+            let damage = state.burnPerMs * dt;
             if (damage <= 0 || tank.hp <= 0) return;
+            damage = absorbDamageWithMicroShield(tank, damage, performance.now());
+            if (damage <= 0) return;
             tank.hp = Math.max(0, tank.hp - damage);
         }
     );
     if (effect) {
         effect.burnPerMs = burnPerMs;
-        showStatus(target, '🔥 Đốt cháy!', BUFF_COLORS.fireIceShot || '#f472b6', 800);
+        showStatus(target, ' Đốt cháy!', BUFF_COLORS.fireIceShot || '#f472b6', 800);
         tagEffect(effect, 'Fire Shot', BUFF_COLORS.fireIceShot || '#f472b6');
     }
 }
 
 function applyIceShotEffect(target) {
     if (!target) return;
+
     const effect = applyEffect(target, 'bossIceShotSlow', ICE_SLOW_DURATION,
         state => {
             state.previousFactor = typeof target.bossIceSlowFactor === 'number' ? target.bossIceSlowFactor : 1;
             target.bossIceSlowFactor = state.previousFactor * ICE_SLOW_MULTIPLIER;
+            target.isIceSlowed = true;
         },
         state => {
             if (!state) return;
             const base = typeof state.previousFactor === 'number' ? state.previousFactor : 1;
             target.bossIceSlowFactor = base;
+            target.isIceSlowed = false;
         }
     );
     if (effect) {
@@ -83,6 +93,64 @@ function applyIceShotEffect(target) {
         showStatus(target, '❄️ Bị làm chậm!', BUFF_COLORS.fireIceShot || '#f472b6', 800);
         tagEffect(effect, 'Ice Shot', BUFF_COLORS.fireIceShot || '#f472b6');
     }
+}
+
+function applyBossPoisonShotEffect(target, baseDamage = 1) {
+    if (!target || target.hp <= 0) return;
+    if (devGodMode && (target === p1 || target === p2)) return;
+
+    const base = Math.max(0.1, baseDamage);
+    const existing = target.activeEffects ? target.activeEffects.bossPoisonShot : null;
+    const prevStack = existing ? (existing.stack || 0) : 0;
+    const newStack = Math.min(POISON_SHOT_MAX_STACK, prevStack + 1);
+    const duration = POISON_SHOT_BASE_DURATION + (newStack - 1) * POISON_SHOT_STACK_DURATION;
+    const dpsRatio = POISON_SHOT_BASE_RATIO + (newStack - 1) * POISON_SHOT_STACK_RATIO;
+    const damagePerSecond = base * dpsRatio;
+
+    const effect = applyEffect(target, 'bossPoisonShot', duration,
+        state => {
+            state.stack = newStack;
+            state.damagePerSecond = damagePerSecond;
+            state.meta = state.meta || {};
+            state.meta.color = BUFF_COLORS.poisonShot || '#bbf7d0';
+            state.meta.label = `Độc x${newStack}`;
+        },
+        state => {
+            if (state) state.stack = 0;
+        },
+        (dt, tank, state) => {
+            if (!state || state.cancelled || dt <= 0) return;
+            if (tank.shield) return;
+            const isPlayer = (tank === p1 || tank === p2);
+            if (devGodMode && isPlayer) return;
+            let damage = (state.damagePerSecond || 0) * dt / 1000;
+            if (damage <= 0 || tank.hp <= 0) return;
+            damage = absorbDamageWithMicroShield(tank, damage, performance.now());
+            if (damage <= 0) return;
+            tank.hp = Math.max(0, tank.hp - damage);
+        }
+    );
+
+    if (effect) {
+        effect.stack = newStack;
+        effect.damagePerSecond = damagePerSecond;
+        effect.meta = effect.meta || {};
+        effect.meta.color = BUFF_COLORS.poisonShot || '#bbf7d0';
+        effect.meta.label = `Độc x${newStack}`;
+        showStatus(target, `☠️ Độc x${newStack}`, BUFF_COLORS.poisonShot || '#bbf7d0', 900);
+    }
+}
+
+function absorbDamageWithMicroShield(target, incomingDamage, now) {
+    if (!target || !target.microShieldEnabled || target.microShieldValue <= 0) return incomingDamage;
+    const absorbed = Math.min(target.microShieldValue, incomingDamage);
+    target.microShieldValue -= absorbed;
+    target.microShieldNextRegen = now + 5000;
+    if (target.microShieldValue <= 0) {
+        target.microShieldValue = 0;
+        showStatus(target, '🧿 Shield vỡ!', BUFF_COLORS.microShield || '#7dd3fc', 600);
+    }
+    return incomingDamage - absorbed;
 }
 
 function fireNormalShot(tank, now) {
@@ -274,17 +342,41 @@ function handleBulletCollisions(now) {
                     applyIceShotEffect(t);
                 }
 
+                if (b.hasPoisonShot) {
+                    const poisonBase = b.poisonShotBaseDamage || baseEffectDamage;
+                    applyBossPoisonShotEffect(t, poisonBase);
+                }
+
+                const shouldTriggerSplit4OnHit = b.hasShotSplit4 && !b._shotSplit4Triggered && t !== b.owner;
+
                 if (!t.shield && applyDirectDamage) {
                     let damage = Math.max(0.1, b.damage || 1);
 
-                    if (t instanceof Boss && t.damageReduction && t.damageReduction < 1) {
-                        damage *= t.damageReduction;
-                        damage = Math.max(0.1, damage);
+                    if (b.criticalMultiplier && b.criticalMultiplier > 1) {
+                        const critColor = BUFF_COLORS.criticalHit || '#fb7185';
+                        damage *= b.criticalMultiplier;
+                        showStatus(t, '💥 Chí mạng!', critColor, 600);
+                        if (b.owner) {
+                            showStatus(b.owner, '💥 Chí mạng!', critColor, 600);
+                        }
                     }
-                    const prevHp = t.hp;
-                    t.hp = Math.max(0, t.hp - damage);
-                    damageDealt = Math.max(0, prevHp - t.hp);
-                    if (b.isPoison) applyPoisonEffect(t);
+
+                    damage = absorbDamageWithMicroShield(t, damage, now);
+
+                    if (damage > 0) {
+                        if (t instanceof Boss && t.damageReduction && t.damageReduction < 1) {
+                            damage *= t.damageReduction;
+                            damage = Math.max(0.1, damage);
+                        }
+                        const prevHp = t.hp;
+                        t.hp = Math.max(0, t.hp - damage);
+                        damageDealt = Math.max(0, prevHp - t.hp);
+                        if (b.isPoison) applyPoisonEffect(t);
+                    }
+                }
+
+                if (shouldTriggerSplit4OnHit) {
+                    triggerShotSplit4(b);
                 }
 
                 if (damageDealt > 0 && b.owner && b.owner.lifeStealAmount > 0 && b.owner.hp > 0) {
@@ -295,40 +387,34 @@ function handleBulletCollisions(now) {
                         b.owner.hp = Math.min(maxHp, prevHp + healAmount);
                         if (b.owner.hp > prevHp) {
                             b.owner.lifeStealPulseTimer = 600;
-                            // Removed heal pulse trigger
                             showStatus(b.owner, 'Hút máu!', BUFF_COLORS.lifeSteal, 600);
                         }
                     }
                 }
 
+                let consumedOnHit = false;
                 if (b.isPiercing && typeof b.bossPierceRemaining === 'number') {
                     if (b.bossPierceDamageFactor && b.bossPierceDamageFactor < 1) {
                         b.damage = Math.max(0.1, (b.damage || 1) * b.bossPierceDamageFactor);
                     }
-                    b.bossPierceRemaining = Math.max(0, b.bossPierceRemaining - 1);
-                    if (b.bossPierceRemaining < 0) {
-                        if (b._bossPierceState) {
-                            b.isPiercing = !!b._bossPierceState.hadPierce;
-                        } else {
-                            b.isPiercing = false;
-                        }
-                        delete b.bossPierceRemaining;
-                        delete b.bossPierceDamageFactor;
-                        delete b._bossPierceState;
-                        delete b.bossPierceExhausted;
-                    } else if (b.bossPierceRemaining === 0) { // Ngừng xuyên khi hết lượt
-                        b.isPiercing = false;
-                        b.bossPierceExhausted = true;
+                    b.bossPierceRemaining--;
+                    if (b.bossPierceRemaining <= 0) {
+                        consumedOnHit = true;
                     }
+                } else if (!b.isPiercing) {
+                    consumedOnHit = true;
                 }
 
-                if (b.hasShotSplit && !b._shotSplitConsumed && t instanceof Boss) {
-                    spawnShotSplitChildren(b);
-                    b.alive = false;
-                    break;
+                if (b.hasShotSplit4 && !b._shotSplit4Triggered) {
+                    triggerShotSplit4(b);
+                    consumedOnHit = true;
                 }
 
-                if (!b.isPiercing) {
+                if (consumedOnHit) {
+                    if (b.hasShotSplit && !b._shotSplitConsumed && t instanceof Boss) {
+                        spawnShotSplitChildren(b);
+                    }
+                    triggerShotSplit4(b);
                     b.alive = false;
                     break;
                 }
@@ -682,7 +768,7 @@ function cleanupBullets() {
 
 function handleTrailDamage(dt, now) {
     const TRAIL_DPS = 0.2; // 0.2 HP mỗi giây
-    const damage = TRAIL_DPS * dt / 1000;
+    let baseDamage = TRAIL_DPS * dt / 1000;
 
     for (const tank of tanks) {
         if (tank.hp <= 0 || tank.invisible) continue;
@@ -695,6 +781,9 @@ function handleTrailDamage(dt, now) {
                 const isPlayer = (tank === p1 || tank === p2);
                 if (devGodMode && isPlayer) continue;
 
+                let damage = baseDamage;
+                damage = absorbDamageWithMicroShield(tank, damage, now);
+                if (damage <= 0) continue;
                 tank.hp = Math.max(0, tank.hp - damage);
 
                 // Apply a short burning visual effect
@@ -920,51 +1009,70 @@ export function updateGame(dt, now) {
     });
 }
 
-export function handleDevKeys(e) {
-    switch(e.key.toLowerCase()){
-        // SPAWN BUFF CỤ THỂ
-        case 'z': spawnBuff('heal'); flashMsg('Tạo buff: hồi máu'); break;
-        case '2': spawnBuff('speed'); flashMsg('Tạo buff: tăng tốc'); break;
-        case 'c': spawnBuff('homing'); flashMsg('Tạo buff: đạn tự dẫn'); break;
-        case 'v': spawnBuff('invis'); flashMsg('Tạo buff: tàng hình'); break;
-        case '5': spawnBuff('shrink'); flashMsg('Tạo buff: thu nhỏ'); break;
-        case '6': spawnBuff('shield'); flashMsg('Tạo buff: khiên'); break;
-        case '7': spawnBuff('rapidfire'); flashMsg('Tạo buff: nạp nhanh'); break;
-        case '8': spawnBuff('bigbullet'); flashMsg('Tạo buff: đạn to'); break;
-        case '9': spawnBuff('clone'); flashMsg('Tạo buff: phân thân'); break;
-        case '0': spawnBuff('shotgun'); flashMsg('Tạo buff: bắn chùm'); break;
-        case 'q': spawnBuff('ricochet'); flashMsg('Tạo buff: nảy vô hạn'); break;
-        case 'y': spawnBuff('giantEnemy'); flashMsg('Tạo buff: kẻ địch khổng lồ'); break;
-        case 'e': spawnBuff('reverse'); flashMsg('Tạo buff: đảo phím'); break;
-        case 'r': spawnBuff('explosive'); flashMsg('Tạo buff: đạn nổ'); break;
-        case 't': spawnBuff('root'); flashMsg('Tạo buff: trói chân'); break;
-        case 'u': spawnBuff('pierce'); flashMsg('Tạo buff: đạn xuyên'); break;
-        case 'i': spawnBuff('poison'); flashMsg('Tạo buff: đạn độc'); break;
-        case 'p': spawnBuff('nuke'); flashMsg('Tạo buff: bom nguyên tử'); break;
-        case 'j': spawnBuff('trail'); flashMsg('Tạo buff: dung nham'); break;
-        case 'l': spawnBuff('possession'); flashMsg('Tạo buff: thôi miên'); break;
-        case 'x': spawnBuff('fury'); flashMsg('Tạo buff: cuồng nộ'); break;
+export function triggerDevAction(rawKey, context = {}) {
+    if (!rawKey) return false;
+    const key = rawKey.toLowerCase();
 
-        // PHÍM KHÁC (giữ nguyên các chức năng Dev Mode hiện tại)
-        case 'h': p1.hp=p1.maxHp; p2.hp=p2.maxHp; flashMsg('HP full'); break;
-        case 'm':
-            setDevOneHitKill(!devOneHitKill);
-            flashMsg(devOneHitKill ? '1 Hit Kill ON' : '1 Hit Kill OFF');
-            if(devOneHitKill){
-                showStatus(p1,'Sát thương 999999','#ff0000',900);
-                showStatus(p2,'Sát thương 999999','#ff0000',900);
+    switch (key) {
+        // SPAWN BUFF CỤ THỂ
+        case 'z': spawnBuff('heal'); flashMsg('Tạo buff: hồi máu'); return true;
+        case '2': spawnBuff('speed'); flashMsg('Tạo buff: tăng tốc'); return true;
+        case 'c': spawnBuff('homing'); flashMsg('Tạo buff: đạn tự dẫn'); return true;
+        case 'v': spawnBuff('invis'); flashMsg('Tạo buff: tàng hình'); return true;
+        case '5':
+            spawnBuff('shrink');
+            flashMsg('Tạo buff: thu nhỏ');
+            if (context.event?.shiftKey) {
+                const dmgTestBullet = new Bullet(p1.x + 50, p1.y, 0, p1);
+                console.log('🧪 TEST BULLET DAMAGE');
+                console.log('P1 damage:', p1.damage);
+                console.log('Bullet damage:', dmgTestBullet.damage);
+                console.log('P1 bossBuffStats:', p1.bossBuffStats);
+                bullets.push(dmgTestBullet);
+                flashMsg(`🧪 Test bullet: P1 dmg=${p1.damage}, bullet dmg=${dmgTestBullet.damage}`);
             }
-            syncSettingsUI();
-            break;
-        case 't': 
-            // TEST: Force slime boss jump
-            if (boss && boss.bossType === 'slime') {
+            return true;
+        case '6': spawnBuff('shield'); flashMsg('Tạo buff: khiên'); return true;
+        case '7': spawnBuff('rapidfire'); flashMsg('Tạo buff: nạp nhanh'); return true;
+        case '8': spawnBuff('bigbullet'); flashMsg('Tạo buff: đạn to'); return true;
+        case '9': spawnBuff('clone'); flashMsg('Tạo buff: phân thân'); return true;
+        case '0': spawnBuff('shotgun'); flashMsg('Tạo buff: bắn chùm'); return true;
+        case 'q': spawnBuff('ricochet'); flashMsg('Tạo buff: nảy vô hạn'); return true;
+        case 'y': spawnBuff('giantEnemy'); flashMsg('Tạo buff: kẻ địch khổng lồ'); return true;
+        case 'e': spawnBuff('reverse'); flashMsg('Tạo buff: đảo phím'); return true;
+        case 'r': spawnBuff('explosive'); flashMsg('Tạo buff: đạn nổ'); return true;
+        case 't':
+            spawnBuff('root');
+            flashMsg('Tạo buff: trói chân');
+            if (context.event?.shiftKey && boss && boss.bossType === 'slime') {
                 boss.jumpAttack(p1);
                 flashMsg('🧪 TEST: Force slime jump!');
             }
-            break;
+            return true;
+        case 'u': spawnBuff('pierce'); flashMsg('Tạo buff: đạn xuyên'); return true;
+        case 'i': spawnBuff('poison'); flashMsg('Tạo buff: đạn độc'); return true;
+        case 'p': spawnBuff('nuke'); flashMsg('Tạo buff: bom nguyên tử'); return true;
+        case 'j': spawnBuff('trail'); flashMsg('Tạo buff: dung nham'); return true;
+        case 'l': spawnBuff('possession'); flashMsg('Tạo buff: thôi miên'); return true;
+        case 'x': spawnBuff('fury'); flashMsg('Tạo buff: cuồng nộ'); return true;
+        case 'k': spawnBuff('silence'); flashMsg('Tạo buff: câm lặng'); return true;
+
+        // PHÍM KHÁC (giữ nguyên các chức năng Dev Mode hiện tại)
+        case 'h':
+            p1.hp = p1.maxHp;
+            p2.hp = p2.maxHp;
+            flashMsg('HP full');
+            return true;
+        case 'm':
+            setDevOneHitKill(!devOneHitKill);
+            flashMsg(devOneHitKill ? '1 Hit Kill ON' : '1 Hit Kill OFF');
+            if (devOneHitKill) {
+                showStatus(p1, 'Sát thương 999999', '#ff0000', 900);
+                showStatus(p2, 'Sát thương 999999', '#ff0000', 900);
+            }
+            syncSettingsUI();
+            return true;
         case '1':
-            // TEST: Add ALL buffs
             if (gameMode === 'vsboss') {
                 console.log('🧪 ADDING ALL BUFFS');
                 const allBuffs = ['muscle', 'thickSkin', 'agility', 'bulletSpeed'];
@@ -976,9 +1084,9 @@ export function handleDevKeys(e) {
                 });
                 console.log('All buffs added:', bossMode.permanentBuffs);
                 console.log('P1 final stats:', {
-                    damage: p1.damage, 
-                    maxHp: p1.maxHp, 
-                    hp: p1.hp, 
+                    damage: p1.damage,
+                    maxHp: p1.maxHp,
+                    hp: p1.hp,
                     moveSpeed: p1.moveSpeed?.toFixed(3),
                     bulletSpeed: p1.bulletSpeedMultiplier?.toFixed(2)
                 });
@@ -986,54 +1094,57 @@ export function handleDevKeys(e) {
             } else {
                 flashMsg('❌ Not in boss mode!');
             }
-            break;
+            return true;
         case '3':
-            // TEST: Clear all buffs
             if (gameMode === 'vsboss') {
                 console.log('🧪 CLEARING ALL BUFFS');
                 console.log('Before clear:', bossMode.permanentBuffs);
                 bossMode.permanentBuffs = [];
                 reapplyPermanentBuffs();
                 console.log('After clear:', bossMode.permanentBuffs);
-                console.log('P1 stats after clear:', {damage: p1.damage, maxHp: p1.maxHp, hp: p1.hp});
+                console.log('P1 stats after clear:', { damage: p1.damage, maxHp: p1.maxHp, hp: p1.hp });
                 flashMsg('🧪 Cleared all buffs!');
             } else {
                 flashMsg('❌ Not in boss mode!');
             }
-            break;
-        case '5':
-            // TEST: Manual bullet damage
-            const dmgTestBullet = new Bullet(p1.x + 50, p1.y, 0, p1);
-            console.log('🧪 TEST BULLET DAMAGE');
-            console.log('P1 damage:', p1.damage);
-            console.log('Bullet damage:', dmgTestBullet.damage);
-            console.log('P1 bossBuffStats:', p1.bossBuffStats);
-            bullets.push(dmgTestBullet);
-            flashMsg(`🧪 Test bullet: P1 dmg=${p1.damage}, bullet dmg=${dmgTestBullet.damage}`);
-            break;
+            return true;
         case 'b': {
-            const devBullet = new Bullet(450,280,Math.random()*Math.PI*2,p1);
-            // styleBulletForOwner is now internal to Bullet constructor via Tank.shoot
+            const devBullet = new Bullet(450, 280, Math.random() * Math.PI * 2, p1);
             bullets.push(devBullet);
             flashMsg('Spawn bullet');
-            break;
+            return true;
         }
-        case 'o': resetAfterKill(); flashMsg('Reset game'); break;
-        case 'f': p1.reloadRate*=5; p2.reloadRate*=5; flashMsg('Fast reload'); break;
-        case 'k': spawnBuff('silence'); flashMsg('Tạo buff: câm lặng'); break;
+        case 'o':
+            resetAfterKill();
+            flashMsg('Reset game');
+            return true;
+        case 'f':
+            p1.reloadRate *= 5;
+            p2.reloadRate *= 5;
+            flashMsg('Fast reload');
+            return true;
         case 'n':
             setDevNoWalls(!devNoWalls);
-            flashMsg(devNoWalls?'No Walls ON':'No Walls OFF');
+            flashMsg(devNoWalls ? 'No Walls ON' : 'No Walls OFF');
             syncSettingsUI();
-            break;
+            return true;
         case 'g':
             setDevGodMode(!devGodMode);
-            flashMsg(devGodMode?'Bất tử ON':'Bất tử OFF');
-            if(devGodMode){
-                showStatus(p1,'Miễn sát thương','#ffe27a',900);
-                showStatus(p2,'Miễn sát thương','#ffe27a',900);
+            flashMsg(devGodMode ? 'Bất tử ON' : 'Bất tử OFF');
+            if (devGodMode) {
+                showStatus(p1, 'Miễn sát thương', '#ffe27a', 900);
+                showStatus(p2, 'Miễn sát thương', '#ffe27a', 900);
             }
             syncSettingsUI();
-            break;
+            return true;
     }
+
+    return false;
+}
+
+export function handleDevKeys(e) {
+    if (!e || typeof e.key !== 'string') return false;
+    const handled = triggerDevAction(e.key, { event: e });
+    if (handled && typeof e.preventDefault === 'function') e.preventDefault();
+    return handled;
 }

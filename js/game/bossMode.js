@@ -10,7 +10,8 @@ import { W, H } from '../canvas.js';
 import { showStatus } from '../systems/effects.js';
 import { getBossBuffName } from '../utils.js';
 import { resetAfterKill } from './gameController.js';
-import { bossModeBuffs, BUFF_COLORS, bossModeBuffWeights } from '../constants.js';
+import { bossModeBuffs, BUFF_COLORS, bossModeBuffWeights, bossBuffRarities } from '../constants.js';
+
 import Boss from '../classes/Boss.js';
 import { syncSettingsUI } from '../ui/settings.js';
 
@@ -37,6 +38,21 @@ const gameModeInfo = document.getElementById('gameModeInfo');
 const floorInfo = document.getElementById('floorInfo');
 const permanentBuffsInfo = document.getElementById('permanentBuffsInfo');
 
+const STACKABLE_BOSS_BUFFS = new Set(['bounceShot', 'bossPierce']);
+
+export function isStackableBossBuff(buffType) {
+    return STACKABLE_BOSS_BUFFS.has(buffType);
+}
+
+const rarityLabels = {
+    common: 'Common',
+    uncommon: 'Uncommon',
+    rare: 'Rare',
+    epic: 'Epic',
+    legendary: 'Legendary',
+    mythical: 'Mythical'
+};
+
 // --- Functions ---
 
 function ensureBossBuffStats(target) {
@@ -59,6 +75,12 @@ function ensureBossBuffStats(target) {
             bounceDamageFactor: null,
             pierceDamagePenalty: null,
             shotSplit: false,
+            shotSplit4: false,
+            ricochetTracking: false,
+            poisonShot: false,
+            microShieldEnabled: false,
+            microShieldStrength: 0,
+            criticalHit: false,
             shieldActive: false,
             shieldReady: false,
             slowMotionActive: false,
@@ -82,6 +104,12 @@ function ensureBossBuffStats(target) {
         if (typeof stats.bounceDamageFactor === 'undefined') stats.bounceDamageFactor = null;
         if (typeof stats.pierceDamagePenalty === 'undefined') stats.pierceDamagePenalty = null;
         if (typeof stats.shotSplit === 'undefined') stats.shotSplit = false;
+        if (typeof stats.shotSplit4 === 'undefined') stats.shotSplit4 = false;
+        if (typeof stats.ricochetTracking === 'undefined') stats.ricochetTracking = false;
+        if (typeof stats.poisonShot === 'undefined') stats.poisonShot = false;
+        if (typeof stats.microShieldEnabled === 'undefined') stats.microShieldEnabled = false;
+        if (typeof stats.microShieldStrength === 'undefined') stats.microShieldStrength = 0;
+        if (typeof stats.criticalHit === 'undefined') stats.criticalHit = false;
         if (typeof stats.shieldActive === 'undefined') stats.shieldActive = false;
         if (typeof stats.shieldReady === 'undefined') stats.shieldReady = false;
         if (typeof stats.slowMotionActive === 'undefined') stats.slowMotionActive = false;
@@ -89,6 +117,23 @@ function ensureBossBuffStats(target) {
     }
 
     return target.bossBuffStats;
+}
+
+function recalcEnemySlowFactor() {
+    let factor = 1;
+    if (gameMode === 'vsboss') {
+        const hasSlowMotion = [p1, p2].some(player => {
+            if (!player) return false;
+            const stats = player.bossBuffStats;
+            return stats && stats.slowMotionActive;
+        });
+        if (hasSlowMotion) {
+            factor *= 0.8; // 20% slow
+        }
+    }
+
+    bossMode.enemySlowFactor = factor;
+    setEnemySlowFactor(factor);
 }
 
 function updateBossBuffDerivedStats(target) {
@@ -118,14 +163,14 @@ function updateBossBuffDerivedStats(target) {
     target.lifeStealAmount = stats.lifeSteal || 0;
     target.bossBounceCount = stats.bounceExtra || 0;
     target.bossBounceDamageFactor = target.bossBounceCount > 0
-        ? (stats.bounceDamageFactor || 0.9)
+        ? (stats.bounceDamageFactor ?? BOUNCE_SHOT_FACTOR)
         : null;
+
     const pierceStacks = stats.pierceExtra || 0;
     target.bossPierceStacks = pierceStacks;
-    target.bossPierceDamageFactor = pierceStacks > 0 && stats.pierceDamagePenalty != null
-        ? (1 - stats.pierceDamagePenalty)
+    target.bossPierceDamageFactor = pierceStacks > 0
+        ? (stats.pierceDamagePenalty != null ? (1 - stats.pierceDamagePenalty) : 1)
         : null;
-    target.damage *= pierceStacks > 0 ? 0.9 : 1; // Giảm sát thương cố định
     target.hasBossPierce = pierceStacks > 0;
 
     const hasTwinShot = !!stats.twinShot;
@@ -141,10 +186,26 @@ function updateBossBuffDerivedStats(target) {
 
     target.bossMagnetRadius = stats.magnetRadius || 0;
     target.hasShotSplit = !!stats.shotSplit;
+    target.hasShotSplit4 = !!stats.shotSplit4;
+    target.hasRicochetTracking = !!stats.ricochetTracking;
+    target.hasPoisonShot = !!stats.poisonShot;
+    target.hasCriticalHit = !!stats.criticalHit;
     target.hasBossShield = !!stats.shieldActive;
     target.bossShieldReady = !!stats.shieldReady;
     target.hasFireIceShot = !!stats.fireIceShot;
     target.bossIceSlowFactor = 1;
+
+    if (stats.microShieldEnabled && stats.microShieldStrength > 0) {
+        target.microShieldEnabled = true;
+        target.microShieldMax = stats.microShieldStrength;
+        target.microShieldValue = target.microShieldMax;
+        target.microShieldNextRegen = Number.POSITIVE_INFINITY;
+    } else {
+        target.microShieldEnabled = false;
+        target.microShieldMax = 0;
+        target.microShieldValue = 0;
+        target.microShieldNextRegen = 0;
+    }
 
     if (stats.slowMotionActive) {
         // slow effect handled globally
@@ -153,13 +214,19 @@ function updateBossBuffDerivedStats(target) {
     recalcEnemySlowFactor();
 }
 
-function recalcEnemySlowFactor() {
-    const slowActive = [p1, p2].some(player => {
-        if (!player) return false;
-        const stats = player.bossBuffStats;
-        return stats && stats.slowMotionActive;
-    });
-    setEnemySlowFactor(slowActive ? 0.9 : 1);
+const BOUNCE_SHOT_FACTOR = 0.9;
+const PIERCE_BASE_PENALTY = 0.1;
+
+function applyBounceBuff(stats) {
+    stats.bounceExtra = (stats.bounceExtra || 0) + 1;
+    stats.bounceDamageFactor = BOUNCE_SHOT_FACTOR; // luôn giảm tối đa 10%
+    return stats.bounceExtra;
+}
+
+function applyPierceBuff(stats) {
+    stats.pierceExtra = (stats.pierceExtra || 0) + 1;
+    stats.pierceDamagePenalty = PIERCE_BASE_PENALTY; // luôn giảm tối đa 10%
+    return stats.pierceExtra;
 }
 
 function applyBossBuffToTarget(target, buffType, { silent = false } = {}) {
@@ -167,6 +234,7 @@ function applyBossBuffToTarget(target, buffType, { silent = false } = {}) {
     if (!stats) return;
 
     // Ghi lại thông số TRƯỚC khi áp dụng buff
+
     const beforeReload = target.reload.toFixed(0);
     const beforeReloadRate = target.reloadRate.toFixed(4);
     const beforeMoveSpeed = target.moveSpeed.toFixed(3);
@@ -185,31 +253,15 @@ function applyBossBuffToTarget(target, buffType, { silent = false } = {}) {
             break;
         }
         case 'bounceShot': {
-            stats.bounceExtra = (stats.bounceExtra || 0) + 1;
-            stats.bounceDamageFactor = Math.min(stats.bounceDamageFactor ?? 1, 0.9);
-            message = '↺ Nảy thêm +1 (–10% sát thương cố định)';
+            const totalBounces = applyBounceBuff(stats);
+            message = `↺ Nảy thêm +1 (tổng +${totalBounces}, –10% sát thương tối đa)`;
             color = BUFF_COLORS.bounceShot;
             break;
         }
-        case 'bounceShot2': {
-            stats.bounceExtra = (stats.bounceExtra || 0) + 1;
-            stats.bounceDamageFactor = Math.min(stats.bounceDamageFactor ?? 1, 0.85);
-            message = '↺↺ Nảy thêm +1 (–15% sát thương cố định)';
-            color = BUFF_COLORS.bounceShot2;
-            break;
-        }
         case 'bossPierce': {
-            stats.pierceExtra = (stats.pierceExtra || 0) + 1;
-            stats.pierceDamagePenalty = Math.max(stats.pierceDamagePenalty || 0, 0.1);
-            message = '⤫ Xuyên thêm +1 (–10% sát thương cố định)';
+            const totalPierce = applyPierceBuff(stats);
+            message = `⤫ Xuyên thêm +1 (tổng +${totalPierce}, –10% sát thương tối đa)`;
             color = BUFF_COLORS.bossPierce;
-            break;
-        }
-        case 'bossPierce2': {
-            stats.pierceExtra = (stats.pierceExtra || 0) + 1;
-            stats.pierceDamagePenalty = Math.max(stats.pierceDamagePenalty || 0, 0.1);
-            message = '⤫⤫ Xuyên thêm +1 (–10% sát thương cố định)';
-            color = BUFF_COLORS.bossPierce2;
             break;
         }
         case 'bossFireRate': {
@@ -243,6 +295,38 @@ function applyBossBuffToTarget(target, buffType, { silent = false } = {}) {
             color = BUFF_COLORS.shotSplit;
             break;
         }
+        case 'shotSplit4': {
+            stats.shotSplit4 = true;
+            message = '⚛️×4 Đạn trúng địch nổ thành 4 viên (40% dmg)';
+            color = BUFF_COLORS.shotSplit4;
+            break;
+        }
+        case 'ricochetTracking': {
+            stats.ricochetTracking = true;
+            message = '🎯 Đạn nảy lần đầu sẽ khóa mục tiêu';
+            color = BUFF_COLORS.ricochetTracking;
+            break;
+        }
+        case 'poisonShot': {
+            stats.poisonShot = true;
+            message = '☠️ Đạn gây độc 3s, stack tối đa 3 lần';
+            color = BUFF_COLORS.poisonShot;
+            break;
+        }
+        case 'microShield': {
+            stats.microShieldEnabled = true;
+            const shieldValue = (target.maxHp || stats.baseMaxHp || 3) * 0.2;
+            stats.microShieldStrength = Math.max(stats.microShieldStrength || 0, shieldValue);
+            message = `🧿 MicroShield +${shieldValue.toFixed(1)} HP (hồi sau 5s)`;
+            color = BUFF_COLORS.microShield;
+            break;
+        }
+        case 'criticalHit': {
+            stats.criticalHit = true;
+            message = '💥 10% chí mạng x2 damage';
+            color = BUFF_COLORS.criticalHit;
+            break;
+        }
         case 'bossShield': {
             stats.shieldActive = true;
             stats.shieldReady = true;
@@ -252,7 +336,7 @@ function applyBossBuffToTarget(target, buffType, { silent = false } = {}) {
         }
         case 'slowMotion10': {
             stats.slowMotionActive = true;
-            message = '🐢 Làm chậm Boss + đạn địch 10%';
+            message = '🐢 Làm chậm Boss + đạn địch 20%';
             color = BUFF_COLORS.slowMotion10;
             break;
         }
@@ -322,6 +406,12 @@ export function startBossMode() {
             bounceDamageFactor: null,
             pierceDamagePenalty: null,
             shotSplit: false,
+            shotSplit4: false,
+            ricochetTracking: false,
+            poisonShot: false,
+            microShieldEnabled: false,
+            microShieldStrength: 0,
+            criticalHit: false,
             shieldActive: false,
             shieldReady: false,
             slowMotionActive: false,
@@ -446,7 +536,10 @@ export function showBuffSelection() {
 function getRandomBossBuffs(count) {
     const selected = [];
     // Lọc ra những buff người chơi đã có để không xuất hiện lại
-    const availablePool = bossModeBuffs.filter(buff => !bossMode.permanentBuffs.includes(buff));
+    const availablePool = bossModeBuffs.filter(buff => {
+        if (STACKABLE_BOSS_BUFFS.has(buff)) return true;
+        return !bossMode.permanentBuffs.includes(buff);
+    });
 
     const pool = [...availablePool];
     const weights = { ...bossModeBuffWeights };
@@ -529,15 +622,24 @@ export function reapplyPermanentBuffs() {
         stats.bounceDamageFactor = null;
         stats.pierceDamagePenalty = null;
         stats.shotSplit = false;
+        stats.shotSplit4 = false;
+        stats.ricochetTracking = false;
+        stats.poisonShot = false;
+        stats.microShieldEnabled = false;
+        stats.microShieldStrength = 0;
+        stats.criticalHit = false;
         stats.shieldActive = false;
         stats.shieldReady = false;
         stats.slowMotionActive = false;
         stats.fireIceShot = false;
+
+        updateBossBuffDerivedStats(player);
     });
     bossMode.permanentBuffs.forEach(buff => {
         [p1, p2].forEach(player => applyBossBuffToTarget(player, buff, { silent: true }));
     });
     recalcEnemySlowFactor();
+    updateGameModeUI();
 }
 
 export function updateGameModeUI() {
@@ -566,14 +668,18 @@ function showBuffSelectionUI() {
     if (!buffOptions) return;
     buffOptions.innerHTML = '';
     bossMode.availableBuffs.forEach((buff, index) => {
+        const rarity = bossBuffRarities[buff] || 'common';
+        const rarityLabel = rarityLabels[rarity] || rarity;
         const buffDiv = document.createElement('div');
-        buffDiv.className = 'buff-card';
+        buffDiv.className = `buff-card buff-card--${rarity}`;
         buffDiv.innerHTML = `
+            <div class="buff-card__rarity">${rarityLabel}</div>
             <div class="buff-card__key">${index + 1}</div>
             <div class="buff-card__title">${getBossBuffName(buff)}</div>
             <div class="buff-card__desc">${getBossBuffDescription(buff)}</div>
         `;
         buffDiv.addEventListener('click', () => selectBossBuff(index));
+
         buffOptions.appendChild(buffDiv);
     });
     buffSelectionOverlay.style.display = 'flex';
@@ -588,18 +694,21 @@ function hideBuffSelectionUI() {
 function getBossBuffDescription(buffType) {
     const descriptions = {
         lifeSteal: '+0.2 máu mỗi lần gây sát thương',
-        bounceShot: 'Đạn nảy thêm 1 lần, -10% sát thương sau mỗi nảy',
-        bounceShot2: 'Đạn nảy thêm 1 lần, -15% sát thương sau mỗi nảy',
-        bossPierce: 'Đạn xuyên thêm 1 kẻ địch, -10% sát thương cố định',
-        bossPierce2: 'Đạn xuyên thêm 2 kẻ địch, -10% sát thương cố định',
+        bounceShot: 'Đạn nảy thêm +1, có thể cộng dồn vô hạn (giảm sát thương tối đa 10%)',
+        bossPierce: 'Đạn xuyên thêm +1 mục tiêu, cộng dồn vô hạn (giảm sát thương tối đa 10%)',
         bossFireRate: '+30% tốc độ bắn và nạp đạn',
         bossMoveSpeed: '+30% tốc độ di chuyển',
         twinShot: 'Sau 5 phát sẽ thưởng 1 lần bắn x2 đạn',
         magnetSmall: 'Hút buff trong phạm vi nhỏ xung quanh',
         shotSplit: 'Đạn chạm tường hoặc Boss tách thành 2 đạn con (40% sát thương)',
+        shotSplit4: 'Đạn trúng địch nổ thành 4 viên (40% sát thương mỗi viên)',
+        ricochetTracking: 'Sau lần nảy đầu, đạn sẽ tự điều chỉnh về kẻ địch',
+        poisonShot: 'Gây độc 3s (20% dmg/s), tối đa 3 stack (+1s & +10%/s mỗi stack)',
+        microShield: 'Nhận lá chắn =20% HP, tự hồi sau 5s không nhận sát thương',
         bossShield: 'Khiên chắn 1 đòn mỗi round (không chặn sát thương DoT)',
-        slowMotion10: 'Làm chậm Boss và đạn địch 10% trong round',
-        fireIceShot: 'Mỗi viên đạn ngẫu nhiên gây cháy hoặc làm chậm mục tiêu'
+        slowMotion10: 'Làm chậm Boss và đạn địch 20% trong round',
+        fireIceShot: 'Mỗi viên đạn ngẫu nhiên gây cháy hoặc làm chậm mục tiêu',
+        criticalHit: '10% cơ hội gây chí mạng x2 sát thương'
     };
     return descriptions[buffType] || 'Unknown buff';
 }

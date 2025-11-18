@@ -52,10 +52,18 @@ class Tank{
         this.twinShotBonusCharges = 0;
         this.lifeStealPulseTimer = 0;
         this.hasShotSplit = false;
+        this.hasShotSplit4 = false;
+        this.hasRicochetTracking = false;
+        this.hasPoisonShot = false;
+        this.hasCriticalHit = false;
         this.hasBossShield = false;
         this.bossShieldReady = false;
         this.hasFireIceShot = false;
         this.bossIceSlowFactor = 1;
+        this.microShieldEnabled = false;
+        this.microShieldMax = 0;
+        this.microShieldValue = 0;
+        this.microShieldNextRegen = 0;
     }
     update(dt,input){
         if (this.hp <= 0) {
@@ -83,6 +91,14 @@ class Tank{
 
         if (this.lifeStealPulseTimer > 0) {
             this.lifeStealPulseTimer = Math.max(0, this.lifeStealPulseTimer - dt);
+        }
+
+        if (this.microShieldEnabled && this.microShieldMax > 0) {
+            if (this.microShieldValue < this.microShieldMax && performance.now() >= (this.microShieldNextRegen || 0)) {
+                this.microShieldValue = this.microShieldMax;
+                this.microShieldNextRegen = Number.POSITIVE_INFINITY;
+                showStatus(this, '🧿 Shield hồi!', BUFF_COLORS.microShield || '#7dd3fc', 600);
+            }
         }
 
         this.displayRadius += (this.r - this.displayRadius) * Math.min(1, dt/140);
@@ -310,6 +326,12 @@ class Tank{
             const shieldState = this.activeEffects && this.activeEffects.shield;
             const color = (shieldState && shieldState.meta && shieldState.meta.color) || BUFF_COLORS.shield;
             drawEffectRing(ctx, this.x, this.y, radius + 9, color, { lineWidth: 4, alpha: 0.95, glow: true });
+        }
+
+        if (this.microShieldEnabled && this.microShieldValue > 0) {
+            const ratio = Math.max(0, Math.min(1, this.microShieldValue / (this.microShieldMax || 1)));
+            const color = BUFF_COLORS.microShield || '#7dd3fc';
+            drawEffectRing(ctx, this.x, this.y, radius + 6, color, { lineWidth: 3, alpha: 0.5 + 0.4 * ratio, glow: true });
         }
 
         if(devGodMode && (this === p1 || this === p2)){
@@ -601,13 +623,15 @@ class Tank{
         if (this.bossPierceStacks > 0) {
             if (!bullet._bossPierceState) {
                 bullet._bossPierceState = {
-                    hadPierce: !!bullet.isPiercing
+                    hadPierce: !!bullet.isPiercing,
+                    originalDamage: bullet.damage || 1
                 };
             }
             bullet.isPiercing = true;
             const extraTargets = Math.max(0, this.bossPierceStacks);
-            const baseRemaining = (typeof bullet.bossPierceRemaining === 'number' ? bullet.bossPierceRemaining : 0);
-            bullet.bossPierceRemaining = baseRemaining + extraTargets + 1;
+            // Cho phép xuyên qua số mục tiêu tương ứng + mục tiêu đầu tiên
+            bullet.bossPierceRemaining = extraTargets + 1;
+
             if (!bullet.piercedTargets) {
                 bullet.piercedTargets = new Set();
             } else {
@@ -622,6 +646,9 @@ class Tank{
             const baseMax = typeof bullet.maxBounces === 'number' ? bullet.maxBounces : 0;
             bullet.maxBounces = baseMax + this.bossBounceCount;
             bullet.bossBounceRemaining = (typeof bullet.bossBounceRemaining === 'number' ? bullet.bossBounceRemaining : 0) + this.bossBounceCount;
+            if (typeof bullet.bossBounceOriginalDamage !== 'number') {
+                bullet.bossBounceOriginalDamage = bullet.damage || 1;
+            }
             if (this.bossBounceDamageFactor) {
                 bullet.bossBounceDamageFactor = this.bossBounceDamageFactor;
             }
@@ -630,6 +657,30 @@ class Tank{
         if (this.hasShotSplit && !bullet._fromShotSplit) {
             bullet.hasShotSplit = true;
             bullet._shotSplitConsumed = false;
+        }
+
+        if (this.hasShotSplit4 && !bullet._fromShotSplit) {
+            bullet.hasShotSplit4 = true;
+            bullet._shotSplit4Triggered = false;
+        }
+
+        if (this.hasRicochetTracking) {
+            bullet.hasRicochetTracking = true;
+            bullet._ricochetTrackingConsumed = false;
+        }
+
+        if (this.hasPoisonShot) {
+            bullet.hasPoisonShot = true;
+            bullet.poisonShotBaseDamage = bullet.fireIceSourceDamage || bullet.damage || 1;
+        }
+
+        if (this.hasCriticalHit) {
+            const critMultiplier = Math.random() < 0.1 ? 2 : 1;
+            bullet.criticalMultiplier = critMultiplier;
+            bullet.isCriticalShot = critMultiplier > 1;
+        } else {
+            bullet.criticalMultiplier = 1;
+            bullet.isCriticalShot = false;
         }
 
         if (this.hasFireIceShot) {
@@ -709,6 +760,10 @@ class Tank{
         this.bossShieldReady = false;
         this.hasFireIceShot = false;
         this.bossIceSlowFactor = 1;
+        this.microShieldEnabled = false;
+        this.microShieldMax = 0;
+        this.microShieldValue = 0;
+        this.microShieldNextRegen = 0;
     }
     
     drawMiniSlime(ctx) {

@@ -24,14 +24,17 @@ export const BUFF_COLORS = {
     fury:'#dc143c',
     lifeSteal:'#ef4444',
     bounceShot:'#f97316',
-    bounceShot2:'#ea580c',
     bossPierce:'#38bdf8',
-    bossPierce2:'#0ea5e9',
     bossFireRate:'#fb7185',
     bossMoveSpeed:'#22c55e',
     twinShot:'#a855f7',
     magnetSmall:'#60a5fa',
     shotSplit:'#facc15',
+    shotSplit4:'#fde047',
+    ricochetTracking:'#2dd4bf',
+    poisonShot:'#bbf7d0',
+    microShield:'#7dd3fc',
+    criticalHit:'#fb7185',
     bossShield:'#6ee7b7',
     slowMotion10:'#93c5fd',
     fireIceShot:'#f472b6'
@@ -46,31 +49,56 @@ export const buffTypes = [
 export const bossModeBuffs = [
     'lifeSteal',
     'bounceShot',
-    'bounceShot2',
     'bossPierce',
-    'bossPierce2',
     'bossFireRate',
     'bossMoveSpeed',
     'twinShot',
     'magnetSmall',
     'shotSplit',
+    'shotSplit4',
+    'ricochetTracking',
+    'poisonShot',
     'bossShield',
+    'microShield',
     'slowMotion10',
-    'fireIceShot'
+    'fireIceShot',
+    'criticalHit'
 ];
+
+export const bossBuffRarities = {
+    bossFireRate: 'common',
+    bossMoveSpeed: 'common',
+    bounceShot: 'uncommon',
+    bossPierce: 'uncommon',
+    magnetSmall: 'uncommon',
+    lifeSteal: 'rare',
+    slowMotion10: 'rare',
+    poisonShot: 'rare',
+    twinShot: 'epic',
+    shotSplit: 'epic',
+    shotSplit4: 'epic',
+    ricochetTracking: 'epic',
+    bossShield: 'legendary',
+    microShield: 'legendary',
+    fireIceShot: 'mythical',
+    criticalHit: 'mythical'
+};
 
 export const bossModeBuffWeights = {
     lifeSteal: 6,
     bounceShot: 6,
-    bounceShot2: 6,
     bossPierce: 6,
-    bossPierce2: 6,
     bossFireRate: 6,
     bossMoveSpeed: 6,
     twinShot: 6,
     magnetSmall: 6,
     shotSplit: 6,
+    shotSplit4: 4,
+    ricochetTracking: 5,
+    poisonShot: 6,
     bossShield: 6,
+    microShield: 4,
     slowMotion10: 6,
-    fireIceShot: 25
+    fireIceShot: 25,
+    criticalHit: 8
 };

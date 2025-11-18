@@ -151,6 +151,7 @@ class Bullet{
             const pulse = 0.5 + 0.5 * Math.sin((performance.now() - this.spawnTime) / 120);
             ctx.globalAlpha *= 0.9 + 0.1 * pulse;
         }
+        const fireIceType = this.fireIceType;
         if(this.shape === 'square'){
             ctx.translate(this.x, this.y);
             ctx.rotate(Math.atan2(this.vy, this.vx));
@@ -173,58 +174,47 @@ class Bullet{
             }
             ctx.closePath();
             ctx.fill();
-        } else if(this.shape === 'energy'){
-            // Energy bullet with trail
+        } else if (fireIceType === 'fire') {
+            ctx.save();
             ctx.translate(this.x, this.y);
-            ctx.rotate(Math.atan2(this.vy, this.vx));
-            
-            // Energy core
-            const coreGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.r);
-            coreGradient.addColorStop(0, this.color);
-            coreGradient.addColorStop(0.7, this.color);
-            coreGradient.addColorStop(1, 'rgba(99, 102, 241, 0.3)');
-            ctx.fillStyle = coreGradient;
+            const time = performance.now() * 0.01;
+            const pulse = 1 + Math.sin(time) * 0.15;
+            const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.r * 1.6 * pulse);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+            gradient.addColorStop(0.3, '#ffd966');
+            gradient.addColorStop(0.6, '#ff8f3f');
+            gradient.addColorStop(1, 'rgba(255, 69, 0, 0)');
+            ctx.fillStyle = gradient;
             ctx.beginPath();
-            ctx.arc(0, 0, this.r, 0, Math.PI*2);
+            ctx.arc(0, 0, this.r * 1.4 * pulse, 0, Math.PI * 2);
             ctx.fill();
-            
-            // Energy tail
-            ctx.fillStyle = 'rgba(99, 102, 241, 0.6)';
-            ctx.beginPath();
-            ctx.ellipse(-this.r, 0, this.r * 1.5, this.r * 0.5, 0, 0, Math.PI * 2);
-            ctx.fill();
-        } else if(this.shape === 'tech'){
-            // Tech bullet with pulse
-            const time = performance.now() * (this.pulseSpeed || 0.008);
-            const pulse = 1 + Math.sin(time) * 0.3;
-            
+            ctx.restore();
+        } else if (fireIceType === 'ice') {
+            ctx.save();
             ctx.translate(this.x, this.y);
-            ctx.rotate(Math.atan2(this.vy, this.vx));
-            
-            // Tech core
-            const techGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.r * pulse);
-            techGradient.addColorStop(0, '#fca5a5');
-            techGradient.addColorStop(0.5, this.color);
-            techGradient.addColorStop(1, 'rgba(239, 68, 68, 0.3)');
-            ctx.fillStyle = techGradient;
+            const time = performance.now() * 0.006;
+            const shimmer = 1 + Math.sin(time * 2) * 0.1;
+            ctx.fillStyle = 'rgba(173, 216, 230, 0.4)';
             ctx.beginPath();
-            ctx.arc(0, 0, this.r * pulse, 0, Math.PI*2);
+            ctx.ellipse(0, 0, this.r * 1.2 * shimmer, this.r * 0.7 * shimmer, Math.atan2(this.vy, this.vx), 0, Math.PI * 2);
             ctx.fill();
-            
-            // Tech lines
-            ctx.strokeStyle = '#fca5a5';
+            const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.r);
+            gradient.addColorStop(0, 'rgba(255,255,255,0.9)');
+            gradient.addColorStop(1, '#60a5fa');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(0, 0, this.r * 0.9, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(96, 165, 250, 0.7)';
             ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(-this.r, 0);
-            ctx.lineTo(this.r, 0);
-            ctx.moveTo(0, -this.r);
-            ctx.lineTo(0, this.r);
             ctx.stroke();
+            ctx.restore();
         } else {
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
             ctx.fill();
         }
+
         if(this.isPoison){
             ctx.globalAlpha = 0.45;
             ctx.strokeStyle = BUFF_COLORS.poison;

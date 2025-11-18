@@ -209,8 +209,8 @@ export function thornsAttack(boss, target, now) {
             if (player && player.hp > 0 && Math.hypot(player.x - thornX, player.y - thornY) <= 30) {
                 const skipDamage = devGodMode && (player === p1 || player === p2);
                 if (!skipDamage) {
-                    player.hp = Math.max(0, player.hp - 3);
-                    showStatus(player, '-3 HP', '#ef4444', 1500);
+                    player.hp = Math.max(0, player.hp - 1.5);
+                    showStatus(player, '-1.5 HP', '#ef4444', 1500);
                 }
             }
         });
