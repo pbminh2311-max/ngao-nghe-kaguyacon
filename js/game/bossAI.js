@@ -23,12 +23,15 @@ export function updateBossAI(boss, dt) {
 
     if(target){
         boss.angle = Math.atan2(target.y - boss.y, target.x - boss.x);
-        if(now - boss.lastShot >= boss.reload){
+        const isChargingShard = boss.shardBurstState && boss.shardBurstState.phase === 'charging';
+        if(!isChargingShard && now - boss.lastShot >= boss.reload){
             const b = boss.shoot(now);
             if(b) bullets.push(b);
         }
-    updateBossSkills(boss, target, now, dt); // Pass dt here
-    }
+        updateBossSkills(boss, target, now, dt); // Pass dt here
+        Skills.updateShardBurst(boss, target, now);
+        Skills.updateCorruptedAbsorb(boss, now);
+    } // Correctly closes the if(target) block
 
     updateBossAnimations(boss, dt);
     updateBossMovement(boss, target, dt);
@@ -58,20 +61,21 @@ function updateBossAnimations(boss, dt) {
         }
 
         boss.x = boss.jumpStartPos.x + (boss.jumpTargetPos.x - boss.jumpStartPos.x) * easedProgress;
-        boss.y = boss.jumpStartPos.y + (boss.jumpTargetPos.y - boss.jumpTargetPos.y) * easedProgress;
-
+        boss.y = boss.jumpStartPos.y + (boss.jumpTargetPos.y - boss.jumpStartPos.y) * easedProgress;
 
         if (progress >= 1) {
             boss.isJumping = false;
             boss.r = boss.baseRadius;
             // Create a small shockwave on landing
             addExplosion({ x: boss.x, y: boss.y, radius: 40, duration: 300, color: boss.color, isWave: true });
+            Skills.resolveJumpLanding(boss);
         }
     }
 }
 
 function updateBossMovement(boss, target, dt) {
     if (!target || boss.moveSpeed <= 0 || boss.isJumping) return;
+    if (boss.shardBurstState && boss.shardBurstState.phase === 'charging') return;
 
     const distToTarget = dist(boss, target);
     let optimalDistance = 150;
@@ -96,9 +100,11 @@ function updateBossMovement(boss, target, dt) {
     const iceFactor = typeof boss.bossIceSlowFactor === 'number' ? boss.bossIceSlowFactor : 1;
     const slowFactor = (enemySlowFactor || 1) * iceFactor;
     const slowedSpeed = boss.speed * slowFactor;
+    const envMultiplier = typeof boss.environmentSpeedMultiplier === 'number' ? boss.environmentSpeedMultiplier : 1;
+    const effectiveSpeed = slowedSpeed * envMultiplier;
 
-    const moveX = Math.cos(boss.angle) * slowedSpeed;
-    const moveY = Math.sin(boss.angle) * slowedSpeed;
+    const moveX = Math.cos(boss.angle) * effectiveSpeed;
+    const moveY = Math.sin(boss.angle) * effectiveSpeed;
 
     const targetX = clamp(boss.x + moveX, boss.r + 4, W - boss.r - 4);
     const targetY = clamp(boss.y + moveY, boss.r + 4, H - boss.r - 4);
@@ -153,18 +159,29 @@ function updateBossSkills(boss, target, now, dt) {
 
 function updateSlimeSkills(boss, target, now) {
     if (boss.isJumping) return;
-    const timeSinceLastJump = now - (boss.skillCooldowns.jump || 0); // Cooldown is already 3s, which is fine
-    if (timeSinceLastJump >= 3000) {
-        if (dist(boss, target) < 400) {
+    if (!boss.isCorruptedPhase) {
+        const timeSinceLastJump = now - (boss.skillCooldowns.jump || 0);
+        if (timeSinceLastJump >= 3000 && dist(boss, target) < 400) {
             Skills.jumpAttack(boss, target);
-            console.log(`[BOSS AI] Slime used jumpAttack.`);
             boss.skillCooldowns.jump = now;
         }
+        const shardReady = now - (boss.skillCooldowns.shard || 0) >= 5000;
+        if (shardReady && !boss.shardBurstState && dist(boss, target) < 500) {
+            Skills.startShardBurst(boss, target);
+            boss.skillCooldowns.shard = now;
+        }
+        if (!boss.hasSplit && boss.hp <= boss.maxHp * 0.5) {
+            Skills.splitSlime(boss);
+            boss.hasSplit = true;
+        }
+        return;
     }
-    if (!boss.hasSplit && boss.hp <= boss.maxHp * 0.5) {
-        Skills.splitSlime(boss);
-        boss.hasSplit = true;
-    }
+
+    if (Skills.castCorruptedAbsorbBurst(boss, now)) return;
+    if (Skills.castCorruptGroundSurge(boss, now)) return;
+    if (Skills.castSharpHomingShards(boss, now)) return;
+    if (Skills.castGelSpikeField(boss, now)) return;
+    Skills.castCorruptedMiniBrood(boss, now);
 }
 
 function updateWolfSkills(boss, target, now) {

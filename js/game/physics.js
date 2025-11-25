@@ -2,10 +2,12 @@ import { W, H } from '../canvas.js';
 import { clamp, dist } from '../utils.js';
 import { circleRectColl, findCollisionPoint, lineRectColl } from './collision.js';
 import { obstacles } from './obstacles.js';
-import { devNoWalls, tanks, gameMode, boss, p1, p2, p1FocusMode, p2FocusMode, enemySlowFactor } from '../state.js';
+import { devNoWalls, tanks, gameMode, boss, p1, p2, p1FocusMode, p2FocusMode, enemySlowFactor, devMode } from '../state.js';
+
 import { flashMsg } from '../main.js';
 import { addExplosion } from '../rendering/animations.js';
 import { spawnShotSplitChildren, triggerShotSplit4 } from '../utils/shotSplit.js';
+import { getPlayerPuddleSlowFactor, getBulletPuddleSlowFactor } from './slimeHazards.js';
 
 // Ricochet tracking helper
 function findRicochetTarget(bullet) {
@@ -89,7 +91,11 @@ export function updateTankPhysics(tank, dt, input) {
 
     const focusMode = (tank === p1 && p1FocusMode) || (tank === p2 && p2FocusMode);
     const isRooted = !!tank.rooted;
-    const slowFactor = typeof tank.bossIceSlowFactor === 'number' ? tank.bossIceSlowFactor : 1;
+    const isPlayer = (tank === p1 || tank === p2);
+    let slowFactor = typeof tank.bossIceSlowFactor === 'number' ? tank.bossIceSlowFactor : 1;
+    if (isPlayer) {
+        slowFactor *= getPlayerPuddleSlowFactor(tank.x, tank.y);
+    }
 
     if (focusMode) {
         // --- FOCUS MODE LOGIC ---
@@ -124,6 +130,7 @@ export function updateTankPhysics(tank, dt, input) {
             
             // Apply movement with friction
             const effectiveMoveSpeed = tank.moveSpeed * slowFactor;
+
             tank.vx = (tank.vx * tank.friction) + (moveX * effectiveMoveSpeed * dt / 16);
             tank.vy = (tank.vy * tank.friction) + (moveY * effectiveMoveSpeed * dt / 16);
 
@@ -278,7 +285,12 @@ export function updateBulletPhysics(bullet) {
     if (!bullet || !bullet.alive) return;
     const owner = bullet.owner;
     const isEnemyBullet = owner && owner !== p1 && owner !== p2;
-    const slowFactor = isEnemyBullet ? (enemySlowFactor || 1) : 1;
+    const isPlayerBullet = owner === p1 || owner === p2;
+    let slowFactor = isEnemyBullet ? (enemySlowFactor || 1) : 1;
+    if (isPlayerBullet) {
+        slowFactor *= getBulletPuddleSlowFactor(bullet.x, bullet.y);
+    }
+
     const stepVx = bullet.vx * slowFactor;
     const stepVy = bullet.vy * slowFactor;
     const newX = bullet.x + stepVx;
@@ -352,26 +364,6 @@ export function updateBulletPhysics(bullet) {
     if (stepVy > 0 && bullet.prevY < H - bullet.r && newY >= H - bullet.r) { const t = (H - bullet.r - bullet.prevY) / stepVy; if (t < boundaryT) { boundaryT = t; hitBoundary = true; } }
 
     if (hitWall && minT < boundaryT) { // Đã va vào tường
-        const hasBossBounce = typeof bullet.bossBounceRemaining === 'number' && bullet.bossBounceRemaining > 0;
-        const canPierceWall = bullet.isPiercing && typeof bullet.bossPierceRemaining === 'number' && bullet.bossPierceRemaining >= 1;
-
-        // Ưu tiên hiệu ứng nảy; chỉ cho phép xuyên tường nếu không còn lượt nảy
-        if (!hasBossBounce && canPierceWall) {
-            if (bullet.hasShotSplit && !bullet._shotSplitConsumed) {
-                spawnShotSplitChildren(bullet);
-                bullet.alive = false;
-                return;
-            }
-            if (bullet.hasShotSplit4 && !bullet._shotSplit4Triggered) {
-                triggerShotSplit4(bullet);
-                bullet.alive = false;
-                return;
-            }
-        }
-
-        bullet.x = hitPoint.x;
-        bullet.y = hitPoint.y;
-        bounceBullet(bullet, hitWall);
         if (bullet.hasShotSplit && !bullet._shotSplitConsumed) {
             spawnShotSplitChildren(bullet);
             bullet.alive = false;
@@ -383,15 +375,39 @@ export function updateBulletPhysics(bullet) {
             return;
         }
 
-        let remainingT = Math.max(0, (1 - minT) - 0.02);
-        if (remainingT > 0.005) {
-            bullet.prevX = bullet.x;
-            bullet.prevY = bullet.y;
-            bullet.x += bullet.vx * remainingT;
-            bullet.y += bullet.vy * remainingT;
+        // Điều kiện mới: Kiểm tra cả isPiercing (PvP) và bossPierceRemaining (Boss Mode)
+        const canPierceWall = bullet.isPiercing && (typeof bullet.pierceCount === 'number' && bullet.pierceCount > 0 || typeof bullet.bossPierceRemaining === 'number' && bullet.bossPierceRemaining > 0);
+
+        if (!canPierceWall) {
+            // Nảy tường nếu không thể xuyên
+            if (devMode) console.log("Bullet bounced off wall.");
+
+            bullet.x = hitPoint.x;
+            bullet.y = hitPoint.y;
+            bounceBullet(bullet, hitWall);
+
+            // Di chuyển viên đạn trong phần thời gian còn lại của frame sau va chạm
+            let remainingT = Math.max(0, (1 - minT) - 0.02);
+            if (remainingT > 0.005) {
+                bullet.prevX = bullet.x;
+                bullet.prevY = bullet.y;
+                bullet.x += stepVx * remainingT;
+                bullet.y += stepVy * remainingT;
+            }
+        } else {
+            // Đạn xuyên tường không bị giảm số lần xuyên.
+            // Số lần xuyên chỉ giảm khi trúng xe tăng địch.
+            if (typeof bullet.bossPierceRemaining === 'number' && bullet.bossPierceRemaining > 0) {
+                // Xuyên tường của boss vẫn giảm như cũ
+            }
+
+            // Đạn tiếp tục di chuyển từ điểm va chạm trong phần thời gian còn lại của frame
+            bullet.x = hitPoint.x + stepVx * (1 - minT);
+            bullet.y = hitPoint.y + stepVy * (1 - minT);
         }
-        return;
+        // Không return ở đây để cho phép xử lý va chạm biên nếu cần
     } else if (hitBoundary) {
+        // Va chạm với biên màn hình
         bullet.x = bullet.prevX + (newX - bullet.prevX) * boundaryT;
         bullet.y = bullet.prevY + (newY - bullet.prevY) * boundaryT;
         bounceBullet(bullet);
@@ -410,8 +426,8 @@ export function updateBulletPhysics(bullet) {
         if (remainingT > 0.005) {
             bullet.prevX = bullet.x;
             bullet.prevY = bullet.y;
-            bullet.x += bullet.vx * remainingT;
-            bullet.y += bullet.vy * remainingT;
+            bullet.x += stepVx * remainingT;
+            bullet.y += stepVy * remainingT;
         }
         bullet.x = clamp(bullet.x, bullet.r, W - bullet.r);
         bullet.y = clamp(bullet.y, bullet.r, H - bullet.r);

@@ -1,231 +1,160 @@
 import { BUFF_COLORS } from '../constants.js';
-import { devGodMode, p1, p2, tanks } from '../state.js';
-import Tank from '../classes/Tank.js';
-import Boss from '../classes/Boss.js';
+import { tanks } from '../state.js';
+
+export function showStatus(tank, text, color = '#fff', duration = 1200) {
+    if (!tank) return;
+    tank.statusText = text;
+    tank.statusColor = color;
+    tank.statusTimer = duration;
+}
+
+export function styleBulletForOwner(bullet, owner) {
+    if (!bullet || !owner) return;
+
+    // Mặc định đạn mang màu của chủ sở hữu (boss, player...)
+    if (!bullet.color || bullet.color === '#f33') {
+        const baseColor = owner.bulletColor || owner.color;
+        if (baseColor) {
+            bullet.color = baseColor;
+        }
+    }
+
+    // Big Bullet
+    if (owner.bigBullet) {
+        bullet.r = 8;
+        bullet.damage = (bullet.damage || 1) * 1.5;
+    }
+
+    // Homing
+    if (owner.homing) {
+        if (!bullet.homingTarget) bullet.isHoming = true; // Chỉ bật tự tìm kiếm nếu chưa có mục tiêu
+        bullet.homingStartTime = performance.now();
+    }
+
+    // Ricochet (Bounce)
+    if (owner.ricochet) {
+        bullet.isRicochet = true;
+        bullet.maxBounces = 999; // Effectively infinite for the buff duration
+        bullet.color = BUFF_COLORS.ricochet; // Set bullet color for ricochet
+    }
+
+    // Explosive
+    if (owner.explosive) {
+        bullet.isExplosive = true;
+        bullet.shape = 'bomb'; // Đặt hình dạng là bomb
+        bullet.r = 10; // Tăng kích thước viên đạn
+        bullet.color = BUFF_COLORS.explosive; // Đặt màu cho bomb
+    }
+
+    // Pierce (PvP)
+    if (owner.pierce) {
+        bullet.isPiercing = true;
+        bullet.r = 12; // Tăng bán kính cơ bản của viên đạn xuyên
+        bullet.pierceCount = 1; // Cho phép xuyên 1 lần (tường hoặc tank)
+        bullet.color = BUFF_COLORS.pierce;
+        bullet.glow = true;
+    }
+
+    // Poison
+    if (owner.poisonBullet) {
+        bullet.isPoison = true;
+        bullet.color = BUFF_COLORS.poison;
+        bullet.glow = true;
+    }
+
+    // Trail
+    if (owner.trailBullet) {
+        bullet.isTrail = true;
+    }
+}
+
+export function applyEffect(tank, effectName, duration, onStart, onEnd, onUpdate) {
+    if (!tank) return null;
+
+    // Clear existing effect of the same type
+    if (tank.activeEffects && tank.activeEffects[effectName]) {
+        const existing = tank.activeEffects[effectName];
+        if (existing.timeout) clearTimeout(existing.timeout);
+        if (existing.onEnd) existing.onEnd(existing);
+    }
+
+    const effectState = {
+        name: effectName,
+        startTime: performance.now(),
+        duration: duration,
+        onStart: onStart,
+        onEnd: onEnd,
+        onUpdate: onUpdate,
+        cancelled: false,
+        meta: {}
+    };
+
+    if (onStart) {
+        onStart(effectState);
+    }
+
+    if (duration !== Infinity) {
+        effectState.timeout = setTimeout(() => {
+            if (effectState.cancelled) return;
+            if (onEnd) onEnd(effectState);
+            if (tank.activeEffects) delete tank.activeEffects[effectName];
+        }, duration);
+    }
+
+    if (!tank.activeEffects) tank.activeEffects = {};
+    tank.activeEffects[effectName] = effectState;
+
+    return effectState;
+}
+
+export function tagEffect(effect, label, color) {
+    if (!effect) return;
+    effect.meta = effect.meta || {};
+    effect.meta.label = label;
+    effect.meta.color = color;
+}
+
+export function applyPoisonEffect(target) {
+    if (!target || target.hp <= 0) return;
+
+    // Lấy hiệu ứng độc hiện có (nếu có)
+    const existingPoison = target.activeEffects && target.activeEffects.poison;
+    
+    // Tính toán stack mới
+    const currentStack = existingPoison ? (existingPoison.stack || 0) : 0;
+    const newStack = currentStack + 1;
+    
+    // Tính toán sát thương mới dựa trên stack
+    const baseDps = 0.1;
+    const totalDps = baseDps * newStack;
+
+    // Áp dụng hoặc cập nhật hiệu ứng
+    const poisonEffect = applyEffect(target, 'poison', 5000, // Luôn reset thời gian về 5 giây
+        (state) => {
+            state.stack = newStack;
+            state.dps = totalDps;
+            showStatus(target, `☠️ Độc x${newStack}!`, BUFF_COLORS.poison, 1000);
+        },
+        () => { /* No on-end effect */ },
+        (dt, tank, state) => {
+            if (tank.shield) return;
+            tank.hp = Math.max(0, tank.hp - (state.dps * dt / 1000)); // Sử dụng DPS từ state
+        }
+    );
+    tagEffect(poisonEffect, `Độc x${newStack}`, BUFF_COLORS.poison);
+}
 
 export function updateAllEffects(dt) {
+    if (!tanks || tanks.length === 0) return;
+
     for (const tank of tanks) {
         if (!tank || !tank.activeEffects) continue;
 
-        for (const key in tank.activeEffects) {
-            const effect = tank.activeEffects[key];
-            if (!effect || effect.cancelled) continue;
-
-            if (typeof effect.onUpdate === 'function') {
+        for (const effectName in tank.activeEffects) {
+            const effect = tank.activeEffects[effectName];
+            if (effect && effect.onUpdate && !effect.cancelled) {
                 effect.onUpdate(dt, tank, effect);
             }
         }
     }
-}
-
-export function styleBulletForOwner(bullet, owner){
-    if(!bullet || !owner) return;
-    bullet.shape = 'circle';
-    bullet.guidelineColor = null;
-    bullet.glow = false;
-    bullet.explosionRadius = 80;
-    
-    // Special styling for mini slimes (must be checked before instanceof Boss)
-    if (owner.isMiniSlime) {
-        bullet.color = '#4ade80'; // Green slime color
-        bullet.shape = 'slime';
-        bullet.wobbleSpeed = 0.005;
-        bullet.r = 4; // Regular size
-        bullet.glow = true;
-        return;
-    }
-
-    // Special styling for boss bullets
-    if (owner instanceof Boss) {
-        bullet.r = 8; // Larger boss bullets
-        bullet.glow = true;
-        bullet.glowColor = owner.color;
-        bullet.glowIntensity = 15;
-        
-        // Boss type specific bullet effects
-        switch(owner.bossType) {
-            case 'slime':
-                bullet.color = '#4ade80';
-                bullet.shape = 'slime';
-                bullet.wobbleSpeed = 0.005;
-                break;
-            case 'wolf':
-                bullet.color = '#6366f1';
-                bullet.shape = 'energy';
-                bullet.trailLength = 8;
-                break;
-            default: // Golem, Treant, and other future bosses get their own color
-                bullet.color = owner.color || '#ef4444';
-                bullet.shape = 'tech';
-                bullet.pulseSpeed = 0.008;
-                break;
-        }
-        return;
-    }
-    const isHoming = !!owner.homing;
-    const isExplosive = !!owner.explosive;
-    const isRicochet = !!owner.ricochet;
-    const isPierce = !!owner.pierce;
-    const isPoison = !!owner.poisonBullet;
-    const hasTrail = !!owner.trailBullet;
-    const hasRapidfire = !!owner.rapidfire;
-    const hasShotgun = !!owner.shotgun;
-    const hasBigBullet = !!owner.bigBullet;
-
-    bullet.isHoming = isHoming;
-    bullet.isExplosive = isExplosive;
-    bullet.isRicochet = isRicochet;
-    bullet.isPiercing = isPierce || hasTrail; // Lava bullets now also pierce
-    bullet.isPoison = isPoison;
-    bullet.isTrail = hasTrail;
-    if(isPierce && !bullet.piercedTargets){
-        bullet.piercedTargets = new Set();
-    }
-
-    bullet.maxBounces = isRicochet ? Infinity : 8;
-    if(isExplosive){
-        bullet.maxBounces = 0;
-        bullet.shape = 'square';
-        bullet.explosionRadius = 180;
-        bullet.r = Math.max(bullet.r, 5);
-    } else {
-        bullet.maxBounces = isRicochet ? Infinity : 8;
-    }
-
-    if(hasBigBullet){
-        bullet.r = 8;
-    } else if(hasRapidfire){
-        bullet.r = 3;
-    } else {
-        bullet.r = 4;
-    }
-
-    if(isPierce){
-        bullet.r = Math.max(bullet.r, 4.5);
-    }
-
-    if(hasShotgun && !hasBigBullet){
-        bullet.r = Math.max(bullet.r, 4.5);
-    }
-
-    const colorOrder = ['poisonBullet','pierce','ricochet','rapidfire','shotgun','bigBullet','homing','explosive','trailBullet'];
-    const colorLookup = {
-        poison: BUFF_COLORS.poison,
-        pierce: BUFF_COLORS.pierce,
-        ricochet: BUFF_COLORS.ricochet,
-        rapidfire: BUFF_COLORS.rapidfire,
-        shotgun: BUFF_COLORS.shotgun,
-        bigBullet: BUFF_COLORS.bigbullet,
-        homing: BUFF_COLORS.homing,
-        explosive: BUFF_COLORS.explosive,
-        trailBullet: BUFF_COLORS.trail
-    };
-    colorLookup.poisonBullet = BUFF_COLORS.poison; // Add mapping for the correct property name
-
-    let color = '#f33';
-    for(const key of colorOrder){
-        if(owner[key] === true){
-            color = colorLookup[key];
-        }
-    }
-    bullet.color = color;
-
-    if(isHoming){
-        bullet.guidelineColor = '#f44336';
-        bullet.glow = true;
-    } else if(isPierce){
-        bullet.guidelineColor = '#5fd6ff';
-    }
-    if(hasRapidfire || isRicochet || hasBigBullet || hasShotgun || isExplosive || isPierce || isPoison){
-        bullet.glow = true;
-    }
-    if(isPoison){
-        bullet.poisonPulse = 0;
-    }
-}
-export function tagEffect(state,label,color){
-    if(!state) return;
-    state.meta = state.meta || {};
-    if(label) state.meta.label = label;
-    if(color) state.meta.color = color;
-}
-export function showStatus(t, text, color='#eaf2ff', duration=1500){
-    if(!t) return;
-    t.statusText = text;
-    t.statusColor = color;
-    t.statusTimer = duration;
-}
-export function applyEffect(target,name,duration,applyFn,revertFn,onUpdate){
-    if(!target) return;
-    if(!target.activeEffects) target.activeEffects = {};
-    let state = target.activeEffects[name];
-    if(!state){
-        state = {cancelled:false};
-        target.activeEffects[name] = state;
-        if(applyFn) applyFn(state);
-    } else {
-        if(state.timeout) clearTimeout(state.timeout);
-    }
-    state.cancelled = false;
-    state.version = target.stateVersion || 0;
-    state.onUpdate = onUpdate; // Store the onUpdate callback
-    const now = performance.now();
-    state.start = now;
-    state.duration = duration;
-    state.expires = now + duration;
-    state.timeout = setTimeout(()=>{
-        if(state.cancelled) return;
-        if((target.stateVersion || 0) !== state.version) return;
-        if(target.activeEffects[name] !== state) return;
-        if(revertFn) revertFn(state);
-        delete target.activeEffects[name];
-    }, duration);
-    state.revert = revertFn;
-    return state;
-}
-
-export function applyPoisonEffect(target, duration=2000){
-    if(!target || target.hp <= 0) return;
-    if(devGodMode && (target === p1 || target === p2)) return;
-    
-    const color = BUFF_COLORS.poison;
-    const now = performance.now();
-    const existing = target.activeEffects ? target.activeEffects.poison : null;
-    const prevRemaining = existing && existing.expires ? Math.max(0, existing.expires - now) : 0;
-    const totalDuration = prevRemaining + duration;
-    const prevStack = existing ? (existing.stack || 1) : 0;
-    
-    const effPoison = applyEffect(target,'poison',totalDuration,
-        state=>{
-            state.stack = 1;
-            state.damagePerSecond = 0.3;
-            state.meta = state.meta || {};
-            state.meta.color = color;
-            state.meta.label = `Độc x1`; // Khởi tạo label
-        },
-        state=>{
-            if(state){
-                state.stack = 0;
-            }
-        },
-        // onUpdate callback
-        function(dt, tank, st){
-            if(!tank || tank.hp <= 0) return;
-            if(tank.shield) return;
-            const stacks = st.stack || 1;
-            const dps = st.damagePerSecond || 0.3;
-            const damage = dps * stacks * dt / 1000;
-            if(damage > 0){
-                tank.hp = Math.max(0, tank.hp - damage);
-            }
-        }
-    );
-    
-    effPoison.stack = prevStack + 1;
-    effPoison.damagePerSecond = 0.3;
-    effPoison.meta = effPoison.meta || {};
-    effPoison.meta.color = color;
-    effPoison.meta.label = `Độc x${effPoison.stack}`;
-    
-    showStatus(target,'Nhiễm độc', color, 1200);
 }

@@ -9,11 +9,13 @@ import { input } from './game/input.js';import Tank from './classes/Tank.js';
 import { resolveTankTank, resolveTankObstacles, isSameTeam, pickHomingTarget, lineCircleColl, pointToLineDistance, pointToLineDistanceSq, lineRectColl, lineLineColl, findCollisionPoint, lineLineIntersectionT, circleColl, circleRectColl } from './game/collision.js';
 import { initMenu, mainMenuVisible, returnToMainMenu } from './ui/menu.js';
 import { initSettings, toggleSettingsPanel, toggleInstructionsPanel, applyStatSettings, syncSettingsUI } from './ui/settings.js';
-import { updateHUD, drawGameUI } from './ui/hud.js';
-import { updateGame, spawnBuff, resetAfterKill, handleDevKeys, triggerDevAction } from './game/gameController.js';
+import { updateGame } from './game/gameController.js';
+import { handleDevKeys, triggerDevAction } from './game/devTools.js';
+import { spawnMiniTankCompanion } from './game/gameState.js';
 import { render } from './rendering/draw.js';
 import { updateAnimations, clearAnimations } from './rendering/animations.js';
 import { bossMode, reapplyPermanentBuffs, showBuffSelection, exitBossMode, updateGameModeUI, initBossMode, applyBossModeBuff } from './game/bossMode.js';
+import { updateHUD } from './ui/hud.js';
 import { buffTypes } from './constants.js';
 import { 
     p1, p2, tanks, boss, bullets, buffs, gameMode, 
@@ -255,8 +257,8 @@ function loop(now){
     }
 
     render(ctx, now);
-    if(msgTimer>0){ msgTimer--; if(msgTimer===0) msgEl.textContent=''; }
     updateHUD();
+    if(msgTimer>0){ msgTimer--; if(msgTimer===0) msgEl.textContent=''; }
     drawGameInfo(ctx); // Vẽ thông tin game mode
     requestAnimationFrame(loop);
 }

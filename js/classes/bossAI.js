@@ -4,6 +4,7 @@ import { dist, clamp } from '../../utils.js';
 import { circleRectColl } from '../game/collision.js';
 import { obstacles } from '../game/obstacles.js';
 import * as Skills from '../game/bossSkills.js';
+import { updateCorruptedAbsorb } from '../rendering/corruptedAbsorb.js';
 
 export function updateBossAI(boss, dt) {
     let target = null;
@@ -30,6 +31,11 @@ export function updateBossAI(boss, dt) {
     }
 
     updateBossSkills(boss, target, now, dt);
+
+    // Handle corrupted absorb skill for any boss type that might have it
+    if (boss.skills && boss.skills.corruptedAbsorb && boss.skills.corruptedAbsorb.active) {
+        updateCorruptedAbsorb(boss, target, now, dt);
+    }
 }
 
 function updateBossMovement(boss, target, dt) {
@@ -100,6 +106,7 @@ function updateBossSkills(boss, target, now, dt) {
             updateTreantSkills(boss, target, now);
             break;
         default:
+            // Xử lý kỹ năng cho các loại boss khác hoặc boss mặc định
             updateNormalBossSkills(boss, dt, now);
             break;
     }

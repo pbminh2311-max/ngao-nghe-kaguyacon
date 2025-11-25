@@ -136,50 +136,6 @@ export function assignMovingObstacles(){
 }
 
 
-export function resolveTankObstacles(t){
-    // Giữ tank trong giới hạn bản đồ
-    t.x = clamp(t.x, t.r + 4, W - t.r - 4);
-    t.y = clamp(t.y, t.r + 4, H - t.r - 4);
-
-    if(devNoWalls) return;
-
-    // Kiểm tra va chạm với vật cản
-    for (const o of obstacles) {
-        if (circleRectColl({ x: t.x, y: t.y, r: t.r }, o)) {
-            const cx = o.x + o.w/2, cy = o.y + o.h/2;
-            const dx = t.x - cx, dy = t.y - cy;
-            
-            // Xác định cạnh nào của tường bị va chạm
-            const distToLeft = Math.abs(t.x - o.x);
-            const distToRight = Math.abs(t.x - (o.x + o.w));
-            const distToTop = Math.abs(t.y - o.y);
-            const distToBottom = Math.abs(t.y - (o.y + o.h));
-            const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
-            
-            // Tính hướng di chuyển hiện tại
-            const moveDirX = Math.cos(t.angle) * (t.speed >= 0 ? 1 : -1);
-            const moveDirY = Math.sin(t.angle) * (t.speed >= 0 ? 1 : -1);
-            
-            // Đẩy tank ra khỏi tường mà không thay đổi hướng
-            const pushStrength = o.moving ? 0.2 : 0.6; // Gentler push for moving obstacles
-            
-            if(minDist === distToLeft || minDist === distToRight){
-                // Va chạm cạnh trái/phải - chỉ đẩy theo chiều ngang
-                const targetX = minDist === distToLeft ? o.x - t.r - 1 : o.x + o.w + t.r + 1;
-                t.x += (targetX - t.x) * pushStrength;
-                // Giảm tốc độ nhưng không thay đổi hướng
-                t.speed *= 0.5;
-            } else {
-                // Va chạm cạnh trên/dưới - chỉ đẩy theo chiều dọc
-                const targetY = minDist === distToTop ? o.y - t.r - 1 : o.y + o.h + t.r + 1;
-                t.y += (targetY - t.y) * pushStrength;
-                // Giảm tốc độ nhưng không thay đổi hướng
-                t.speed *= 0.5;
-            }
-        }
-    }
-}
-
 export function updateMovingObstacles(dt){
     if(devNoWalls) return;
     const delta = Math.max(0.5, dt / 16) * 2;

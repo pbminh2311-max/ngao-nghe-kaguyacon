@@ -37,7 +37,14 @@ export const BUFF_COLORS = {
     criticalHit:'#fb7185',
     bossShield:'#6ee7b7',
     slowMotion10:'#93c5fd',
-    fireIceShot:'#f472b6'
+    fireIceShot:'#f472b6',
+    damageBoost:'#f973ab',
+    maxHpUp:'#fcd34d',
+    bulletDeflect:'#a5b4fc',
+    debuffResistance:'#34d399',
+    luckUp:'#fde68a',
+    miniTank:'#60a5fa',
+    doubleShot:'#fb923c'
 };
 
 export const buffTypes = [
@@ -62,7 +69,14 @@ export const bossModeBuffs = [
     'microShield',
     'slowMotion10',
     'fireIceShot',
-    'criticalHit'
+    'criticalHit',
+    'damageBoost',
+    'maxHpUp',
+    'bulletDeflect',
+    'debuffResistance',
+    'luckUp',
+    'miniTank',
+    'doubleShot'
 ];
 
 export const bossBuffRarities = {
@@ -71,15 +85,22 @@ export const bossBuffRarities = {
     bounceShot: 'uncommon',
     bossPierce: 'uncommon',
     magnetSmall: 'uncommon',
+    debuffResistance: 'uncommon',
+    luckUp: 'uncommon',
     lifeSteal: 'rare',
     slowMotion10: 'rare',
     poisonShot: 'rare',
+    damageBoost: 'rare',
+    maxHpUp: 'rare',
     twinShot: 'epic',
     shotSplit: 'epic',
     shotSplit4: 'epic',
     ricochetTracking: 'epic',
+    bulletDeflect: 'epic',
+    doubleShot: 'epic',
     bossShield: 'legendary',
     microShield: 'legendary',
+    miniTank: 'legendary',
     fireIceShot: 'mythical',
     criticalHit: 'mythical'
 };
@@ -100,5 +121,12 @@ export const bossModeBuffWeights = {
     microShield: 4,
     slowMotion10: 6,
     fireIceShot: 25,
-    criticalHit: 8
+    criticalHit: 8,
+    damageBoost: 8,
+    maxHpUp: 8,
+    bulletDeflect: 5,
+    debuffResistance: 7,
+    luckUp: 7,
+    miniTank: 3,
+    doubleShot: 5
 };

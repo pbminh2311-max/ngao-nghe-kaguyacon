@@ -62,12 +62,12 @@ export const BuffFactory = {
                     tank.hp = Math.min(tank.maxHp, tank.hp + state.healRate);
                     state.healTimer = 0;
                     showStatus(tank, 'Hồi máu', color, 600);
+                    tank.healPulseTimer = 240;
                 }
             }
         );
         tagEffect(effect, 'Hồi máu', color);
         showStatus(target, 'Hồi máu', color);
-        target.healPulseTimer = 320;
         flashMsg(`${playerName} hồi máu!`);
         return effect;
     },

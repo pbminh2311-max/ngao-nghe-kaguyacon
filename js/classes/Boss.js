@@ -12,19 +12,18 @@ import { roundRect } from '../utils.js';
 export default class Boss extends Tank {
     constructor(x,y,type='normal'){
         super(x,y,'#800',{}); 
+        this.isBoss = true;
         this.bossType = type;
         this.setupBossStats();
-        this.r = 32; // Boss to x2 so với tank bình thường (16*2)
-        this.reload = 3000; // 3s / viên
+        this.r = 32; // Boss x2 tank thường, dễ trúng đạn
+        this.reload = 3000; // 1 viên mỗi 3 giây (tốc bắn Phase 1)
+
         this.lastShot = 0;
         this.bossSkillCooldown = 10000;
         this.baseRadius = this.r;
         this.baseMoveSpeed = this.moveSpeed;
         this.baseFriction = this.friction;
-        this.baseReloadRate = this.reloadRate;
-        this.baseReload = this.reload;
-        this.baseTurnSpeed = this.turnSpeed;
-        
+
         // Boss-specific properties
         this.skillCooldowns = {};
         this.hasSplit = false; // For slime boss
@@ -32,29 +31,44 @@ export default class Boss extends Tank {
         this.damageReduction = 1; // For Golem defense
         this.isDefending = false; // For Golem
         this.isHealing = false; // For Treant visual
-        
+        this.activePuddles = []; // Shared for slime puddle effects
+        this.pendingPuddleId = 0;
+        this.shardBurstState = null;
+        this.miniSlimeLinks = null; // Track adaptive split minis
+        this.pendingJumpImpact = null;
+        this.isSplitForm = false;
+        this.splitMergeTimer = 0;
+        this.invulnerable = false;
+        this.isCorruptedPhase = false;
+        this.corruptedSkillState = {};
+        this.environmentSpeedMultiplier = 1;
+
         // Animation properties
         this.isJumping = false;
         this.jumpStartTime = 0;
         this.jumpStartPos = {x: 0, y: 0};
         this.jumpTargetPos = {x: 0, y: 0};
-        this.jumpDuration = 800; // 0.8s jump animation
+        this.jumpDuration = 1200; // Jump wind-up 1.2s
 
         this.skillTimer = 0; // Timer for normal boss teleport
 
         this.canPhase = true; // Cho phép boss đi xuyên vật thể
+        this.bulletSpeedMultiplier = 1;
     }
     
     setupBossStats() {
         const now = performance.now();
         switch(this.bossType) {
             case 'slime':
-                this.hp = 8;
-                this.maxHp = 8;
-                this.damage = 1;
+                this.hp = 30;
+                this.maxHp = 30;
+                this.damage = 0.25;
                 this.color = '#4a9';
                 this.moveSpeed = 0.04;
-                this.skillCooldowns = {jump: now - 3000}; // Ready to jump immediately
+                this.bulletSpeedMultiplier = 0.75;
+                this.jumpDuration = 1200;
+                this.skillCooldowns = {jump: now - 3000, shard: now - 10000}; // Ready skills immediately
+                this.isCorruptedPhase = false;
                 break;
             case 'wolf':
                 this.hp = 16;
@@ -126,10 +140,17 @@ export default class Boss extends Tank {
         
         // Reset skill-specific properties
         this.hasSplit = false;
+        this.shardBurstState = null;
+        this.pendingJumpImpact = null;
+        this.miniSlimeLinks = null;
         this.isDefending = false;
         this.damageReduction = 1;
         this.isHealing = false;
+        this.invulnerable = false;
         this.isJumping = false;
+        this.isSplitForm = false;
+        this.splitMergeTimer = 0;
+        this.renderAlpha = 1;
         this.setupBossStats(); // This will correctly reset skill cooldowns
     }
     
@@ -417,16 +438,23 @@ export default class Boss extends Tank {
 
     const bullet = new Bullet(bx,by,this.angle,this);
     styleBulletForOwner(bullet, this);
+    // Boss đạn phải to hơn: đảm bảo bán kính tối thiểu lớn
+    const desiredRadius = Math.max(10, Math.round(this.r * 0.35));
+    if (!bullet.r || bullet.r < desiredRadius) {
+        bullet.r = desiredRadius;
+    }
+    bullet.bossVisual = this.bossType || 'default';
 
     const safeDist = this.r + bullet.r + 1;
     bullet.x = this.x + Math.cos(this.angle) * safeDist;
     bullet.y = this.y + Math.sin(this.angle) * safeDist;
 
     return bullet;
-    }
+}
 
-    update(dt){
-        // Call the centralized AI update function
+update(dt){
+    // Call the centralized AI update function
+    updateBossAI(this, dt);
         updateBossAI(this, dt);
     }
 }

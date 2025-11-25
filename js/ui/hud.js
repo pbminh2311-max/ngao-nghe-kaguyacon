@@ -1,6 +1,56 @@
 import { gameUI } from '../main.js';
 import { p1, p2, scoreP1, scoreP2, devMode } from '../state.js';
 
+const EFFECT_LABELS = {
+    heal: 'Hồi máu',
+    speed: 'Tăng tốc',
+    homing: 'Đạn tự dẫn',
+    invis: 'Tàng hình',
+    shield: 'Khiên',
+    bigbullet: 'Đạn to',
+    shotgun: 'Bắn chùm',
+    ricochet: 'Đạn nảy',
+    explosive: 'Đạn nổ',
+    pierce: 'Đạn xuyên',
+    poison: 'Độc',
+    poisonShots: 'Đạn độc',
+    trail: 'Dung nham',
+    shrink: 'Thu nhỏ',
+    rapidfire: 'Nạp nhanh',
+    clone: 'Phân thân',
+    giantEnemy: 'Khổng lồ',
+    reverse: 'Đảo phím',
+    root: 'Bị trói chân',
+    silence: 'Câm lặng',
+    possession: 'Thôi miên',
+    nuke: 'Bom hạt nhân',
+    fury: 'Cuồng nộ',
+    fire: 'Cháy',
+    ice: 'Đóng băng',
+    fireIceShot: 'Hỏa/Băng',
+    poisonShot: 'Độc',
+    microShield: 'MicroShield',
+    lifeSteal: 'Hút máu',
+    bounceShot: 'Đạn nảy+',
+    bossPierce: 'Xuyên+',
+    bossFireRate: 'Tốc độ bắn+',
+    bossMoveSpeed: 'Tốc độ chạy+',
+    twinShot: 'Twin Shot',
+    magnetSmall: 'Nam châm',
+    shotSplit: 'Đạn tách đôi',
+    shotSplit4: 'Đạn tách 4',
+    ricochetTracking: 'Đạn truy đuổi',
+    bossShield: 'Khiên Boss',
+    slowMotion10: 'Làm chậm',
+    damageBoost: 'Tăng sát thương',
+    maxHpUp: 'Tăng HP',
+    bulletDeflect: 'Phản đạn',
+    debuffResistance: 'Kháng debuff',
+    luckUp: 'May mắn',
+    miniTank: 'Mini Tank',
+    doubleShot: 'Double Shot'
+};
+
 function renderEffects(t, el) {
     if (!el) return;
     const now = performance.now();
@@ -8,37 +58,59 @@ function renderEffects(t, el) {
     if (t && t.activeEffects) {
         for (const key in t.activeEffects) {
             const st = t.activeEffects[key];
-            if (!st || st.expires === undefined) continue;
-            const remaining = st.expires - now;
-            if (remaining <= 30) continue;
+            if (!st) continue;
             const meta = st.meta || {};
-            const label = meta.label || key;
+            const duration = st.duration ?? Infinity;
+            const expires = duration === Infinity ? Infinity : (st.startTime + duration);
+            const remaining = expires === Infinity ? Infinity : expires - now;
+            if (expires !== Infinity && remaining <= 30) continue;
+            const label = meta.label || EFFECT_LABELS[key] || key;
+
             const color = meta.color || '#8faad0';
-            effects.push({ label, color, remaining });
+            effects.push({ label, color, remaining, duration, key });
         }
     }
+
     if (effects.length === 0) {
         el.innerHTML = '';
         el.classList.add('empty');
         return;
     }
-    effects.sort((a, b) => a.remaining - b.remaining);
+
+    effects.sort((a, b) => {
+        const ar = a.remaining === Infinity ? Number.MAX_SAFE_INTEGER : a.remaining;
+        const br = b.remaining === Infinity ? Number.MAX_SAFE_INTEGER : b.remaining;
+        return ar - br;
+    });
     el.classList.remove('empty');
 
-    const maxBuffsToShow = 3;
+    const maxBuffsToShow = 4;
     const buffsToShow = effects.slice(0, maxBuffsToShow);
 
-    let html = buffsToShow.map(effect => {
-        const seconds = effect.remaining / 1000;
-        const timeText = seconds >= 10 ? Math.round(seconds) : seconds.toFixed(1);
-        return `<div class="effect" style="--effect-color:${effect.color}"><span class="label">${effect.label}</span><span class="time">${timeText}s</span></div>`;
+    const effectHtml = buffsToShow.map(effect => {
+        const seconds = effect.remaining === Infinity ? Infinity : Math.max(0, effect.remaining / 1000);
+        const timeText = seconds === Infinity ? '∞' : (seconds >= 10 ? Math.round(seconds) : seconds.toFixed(1));
+        const progress = effect.duration === Infinity ? 1 : Math.max(0, Math.min(1, effect.remaining / effect.duration));
+        const progressPercent = (progress * 100).toFixed(1);
+        return `
+            <div class="effect" style="--effect-color:${effect.color}">
+                <div class="effect-meta">
+                    <div class="effect-label-row">
+                        <span class="label">${effect.label}</span>
+                        <span class="time">${timeText}${seconds === Infinity ? '' : 's'}</span>
+                    </div>
+                    <div class="effect-progress">
+                        <span class="effect-progress-bar" style="width:${progressPercent}%"></span>
+                    </div>
+                </div>
+            </div>
+        `;
     }).join('');
 
-    if (effects.length > maxBuffsToShow) {
-        html += `<div class="effect" style="--effect-color:#8faad0; padding: 4px 8px;">...</div>`;
-    }
+    const overflow = effects.length - maxBuffsToShow;
+    const overflowHtml = overflow > 0 ? `<div class="effect more" style="--effect-color:#8faad0;">+${overflow}</div>` : '';
 
-    el.innerHTML = html;
+    el.innerHTML = effectHtml + overflowHtml;
 }
 
 export function updateHUD() {

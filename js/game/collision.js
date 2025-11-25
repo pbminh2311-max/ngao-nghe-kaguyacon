@@ -213,8 +213,11 @@ export function circleColl(a, b){
 
 
 export function pickHomingTarget(bullet){
-    const owner = bullet.owner;
+    // Sửa lỗi: Hàm này có thể được gọi bởi Tank hoặc Bullet.
+    // Nếu là Tank, nó chính là owner. Nếu là Bullet, owner là bullet.owner.
+    const owner = bullet.owner ? bullet.owner : bullet;
     const candidates = [];
+
     for(const t of tanks){
         if(!t || t.hp <= 0 || t.invisible || t === owner || t.pendingRemoval) continue;
         if(owner && isSameTeam(t, owner)) continue;

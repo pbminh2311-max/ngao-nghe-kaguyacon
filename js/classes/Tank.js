@@ -3,8 +3,10 @@ import { clamp, roundRect, drawEffectRing, drawChainAround } from '../utils.js';
 import { obstacles } from '../game/obstacles.js';
 import Bullet from './Bullet.js';
 import { styleBulletForOwner, showStatus } from '../systems/effects.js';
-import { circleRectColl } from '../game/collision.js';
+import { circleRectColl, pickHomingTarget } from '../game/collision.js';
 import { W, H } from '../canvas.js';
+import { drawTankEffects, drawBarrelEffects } from '../rendering/tankEffects.js';
+import { drawTankHUD } from '../ui/tankHUD.js';
 import { updateTankPhysics } from '../game/physics.js';
 import { devNoWalls, devGodMode, p1, p2, gameMode } from '../state.js';
 
@@ -18,12 +20,19 @@ class Tank{
         this.maxAmmo=3; this.ammo=this.maxAmmo; this.reloadRate=1/60; this.reloadCooldown=0;
         this.invisible=false; this.shield=false;
         this.isClone = false; // mặc định false, tank chính
+        this.damageMultiplier = 1;
+        this.damageDebuffUntil = 0;
+        this.isInCorrosiveGel = false;
+        this.corrosiveDamageFactor = 1;
+        this.lastCorrosiveTick = 0;
+
         this.homing=false; this.bigBullet=false; this.ricochet=false;
         this.shotgun=false; this.explosive=false; this.rooted=false;
         this.silenced=false;
         this.pierce=false; this.poisonBullet=false;
         this.possession=false; this.trailBullet=false;
         this.fireRate=false; this.fury=false;
+        this.isMiniSlime = false;
         this.focusMode = false;
         this.possessionBulletCount=0;
         this.activeEffects = {};
@@ -64,6 +73,8 @@ class Tank{
         this.microShieldMax = 0;
         this.microShieldValue = 0;
         this.microShieldNextRegen = 0;
+        this.homingTarget = null; // Mục tiêu đang bị khóa
+        this.isHomingTarget = false; // Cờ cho biết tank này có đang bị khóa không
     }
     update(dt,input){
         if (this.hp <= 0) {
@@ -127,6 +138,30 @@ class Tank{
                 this.reloadCooldown -= 1;
             }
         }
+
+        // Logic khóa mục tiêu cho đạn tự dẫn
+        if (this.activeEffects && this.activeEffects.homing) {
+            // Xóa cờ khỏi mục tiêu cũ nếu nó không còn là mục tiêu nữa
+            if (this.homingTarget && this.homingTarget.isHomingTarget) {
+                this.homingTarget.isHomingTarget = false;
+            }
+            this.homingTarget = pickHomingTarget(this);
+            // Đặt cờ cho mục tiêu mới
+            if (this.homingTarget) {
+                this.homingTarget.isHomingTarget = true;
+            }
+        } else if (this.homingTarget) {
+            // Dọn dẹp khi buff hết hạn
+            this.homingTarget.isHomingTarget = false;
+            this.homingTarget = null;
+        }
+
+        if (this.damageDebuffUntil > 0) {
+            this.damageDebuffUntil = Math.max(0, this.damageDebuffUntil - dt);
+            if (this.damageDebuffUntil <= 0) {
+                this.damageMultiplier = 1;
+            }
+        }
     }
 
     draw(ctx){
@@ -141,8 +176,12 @@ class Tank{
         if(!isFinite(radius) || radius <= 0){
             return;
         }
-        const safeBaseRadius = this.baseRadius > 0 ? this.baseRadius : 16;
-        const scale = Math.max(0.0001, radius / safeBaseRadius);
+        let effectiveBaseRadius = this.baseRadius;
+        if (!Number.isFinite(effectiveBaseRadius) || effectiveBaseRadius <= 0) {
+            effectiveBaseRadius = this.r || 16;
+            this.baseRadius = effectiveBaseRadius;
+        }
+        const scale = Math.max(0.0001, radius / effectiveBaseRadius);
         const muzzleWidthScale = this.shotgun ? 1.25 : 1;
         const muzzleLengthScale = this.shotgun ? 1.5 : 1;
         const cornerRadius = Math.max(4, 6 * scale);
@@ -161,6 +200,7 @@ class Tank{
             roundRect(ctx, -safeRadius, -safeRadius, bodySize, bodySize, cornerRadius, false, true);
         } else {
             const bodyGradient = ctx.createRadialGradient(-safeRadius/3, -safeRadius/3, 0, 0, 0, safeRadius);
+
             bodyGradient.addColorStop(0, this.color);
             bodyGradient.addColorStop(0.7, this.color);
             bodyGradient.addColorStop(1, this.color.replace(/rgb\((\d+),(\d+),(\d+)\)/, (match, r, g, b) => `rgb(${Math.max(0, r-40)},${Math.max(0, g-40)},${Math.max(0, b-40)})`));
@@ -218,382 +258,22 @@ class Tank{
             ctx.fillRect(barrelStartX + barrelWidth - 2, barrelY + 1, 2, barrelHeight - 2);
         }
 
-        if (this.fury) {
-            const color = BUFF_COLORS.fury;
-            const time = performance.now() * 0.008;
-            const pulse = 1 + Math.sin(time) * 0.1;
-            drawEffectRing(ctx, 0, 0, (radius + 10) * pulse, color, { lineWidth: 3, alpha: 0.8, glow: true });
-            ctx.save();
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 2;
-            ctx.globalAlpha = 0.7 + Math.sin(time * 2) * 0.3;
-            for (let i = 0; i < 8; i++) {
-                const angle = (i / 8) * Math.PI * 2 + time * 0.2;
-                ctx.save();
-                ctx.rotate(angle);
-                ctx.strokeRect(radius + 2, -1, 8 + Math.sin(time * 3 + i) * 4, 2);
-                ctx.restore();
-            }
-            ctx.restore();
-        }
-
-        const possessionState = this.activeEffects && this.activeEffects.possession;
-        if(possessionState){
-            const color = (possessionState.meta && possessionState.meta.color) || BUFF_COLORS.possession;
-            const chaos = Math.sin(this.effectPhase * 6) * 0.5;
-            const pulse = 1 + Math.sin(this.effectPhase * 5) * 0.3;
-            drawEffectRing(ctx, 0, 0, radius + 12 + pulse + chaos, color, { lineWidth: 3, alpha: 0.85, dash: [4,4], glow: true });
-            ctx.save();
-            ctx.rotate(this.effectPhase * 2 - this.angle);
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 2;
-            ctx.globalAlpha = 0.6;
-            for(let i = 0; i < 8; i++){
-                const ang = (i / 8) * Math.PI * 2;
-                const r1 = radius + 8;
-                const r2 = radius + 16;
-                ctx.beginPath();
-                ctx.moveTo(Math.cos(ang) * r1, Math.sin(ang) * r1);
-                ctx.lineTo(Math.cos(ang) * r2, Math.sin(ang) * r2);
-                ctx.stroke();
-            }
-            ctx.restore();
-        }
+        // Vẽ các hiệu ứng trên nòng súng (ví dụ: Homing)
+        drawBarrelEffects(ctx, this, { barrelStartX, barrelWidth, barrelY, barrelHeight });
 
         ctx.restore(); // This is the main restore for the tank's transform
 
-        // Burning effect from lava trail
-        if (this.isBurning) {
-            const time = performance.now() * 0.01;
-            ctx.save();
-            ctx.globalAlpha = 0.8;
-            // No translate needed, draw at absolute position
-            for (let i = 0; i < 5; i++) {
-                const angle = (i / 5) * Math.PI * 2 + time * 0.5;
-                const r = radius + 4 + Math.sin(time + i) * 3;
-                const particleX = this.x + Math.cos(angle) * r;
-                const particleY = this.y + Math.sin(angle) * r;
-                ctx.fillStyle = Math.random() > 0.5 ? '#ff4500' : '#ff8c00';
-                ctx.beginPath();
-                ctx.arc(particleX, particleY, 1 + Math.random() * 2, 0, Math.PI * 2);
-                ctx.fill();
-            }
-            ctx.restore();
-        }
-
-        // Heal pulse
-        if(this.healPulseTimer > 0){
-            const progress = 1 - Math.max(0, Math.min(1, this.healPulseTimer / 320));
-            const ringRadius = radius + 8 + progress * 12;
-            drawEffectRing(ctx, this.x, this.y, ringRadius, BUFF_COLORS.heal, {
-                lineWidth: 3,
-                alpha: 1 - progress * 0.8,
-                glow: true
-            });
-        }
-
-        if (this.lifeStealPulseTimer > 0) {
-            const progress = 1 - Math.max(0, Math.min(1, this.lifeStealPulseTimer / 600));
-            const ringRadius = radius + 6 + progress * 10;
-            drawEffectRing(ctx, this.x, this.y, ringRadius, BUFF_COLORS.lifeSteal, {
-                lineWidth: 4,
-                alpha: 0.6 * (1 - progress * 0.7),
-                glow: true
-            });
-        }
-
-        // Speed ring
-        const speedState = this.activeEffects && this.activeEffects.speed;
-        if(speedState){
-            const color = (speedState.meta && speedState.meta.color) || BUFF_COLORS.speed;
-            const ringRadius = radius + 12;
-            ctx.save();
-            ctx.translate(this.x, this.y);
-            ctx.rotate(this.speedRingPhase);
-            ctx.globalAlpha = 0.6;
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 3;
-            ctx.setLineDash([9, 9]);
-            ctx.beginPath();
-            ctx.arc(0, 0, ringRadius, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.restore();
-            drawEffectRing(ctx, this.x, this.y, ringRadius - 3, color, { lineWidth: 1.5, alpha: 0.35 });
-        }
-
-        // Shield
-        if(this.shield){
-            const shieldState = this.activeEffects && this.activeEffects.shield;
-            const color = (shieldState && shieldState.meta && shieldState.meta.color) || BUFF_COLORS.shield;
-            drawEffectRing(ctx, this.x, this.y, radius + 9, color, { lineWidth: 4, alpha: 0.95, glow: true });
-        }
-
-        if (this.microShieldEnabled && this.microShieldValue > 0) {
-            const ratio = Math.max(0, Math.min(1, this.microShieldValue / (this.microShieldMax || 1)));
-            const color = BUFF_COLORS.microShield || '#7dd3fc';
-            drawEffectRing(ctx, this.x, this.y, radius + 6, color, { lineWidth: 3, alpha: 0.5 + 0.4 * ratio, glow: true });
-        }
-
-        if(devGodMode && (this === p1 || this === p2)){
-            drawEffectRing(ctx, this.x, this.y, radius + 18, '#ffe27a', { lineWidth: 2, alpha: 0.65, dash: [6,4], glow: true });
-        }
-
-        if(this.pierce){
-            const color = BUFF_COLORS.pierce;
-            const phaseRadius = radius + 14 + Math.sin(this.effectPhase * 2) * 2;
-            drawEffectRing(ctx, this.x, this.y, phaseRadius, color, { lineWidth: 2.5, alpha: 0.75, dash: [4,6], glow: true });
-        }
-
-        if(this.poisonBullet){
-            const color = BUFF_COLORS.poison;
-            const pulse = 1 + Math.sin(this.effectPhase * 3) * 0.5;
-            drawEffectRing(ctx, this.x, this.y, radius + 8 + pulse, color, { lineWidth: 3, alpha: 0.6 });
-            drawEffectRing(ctx, this.x, this.y, radius + 12 + pulse, color, { lineWidth: 1.5, alpha: 0.35, dash: [2,4] });
-        }
-
-        if(this.silenced){
-            const color = BUFF_COLORS.silence;
-            const pulse = 1 + Math.sin(this.effectPhase * 4) * 0.4;
-            drawEffectRing(ctx, this.x, this.y, radius + 10 + pulse, color, { lineWidth: 2.5, alpha: 0.8, dash: [3,3], glow: true });
-            ctx.save();
-            ctx.translate(this.x, this.y);
-            ctx.rotate(this.angle);
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(-radius - 6, -radius - 6);
-            ctx.lineTo(radius + 6, radius + 6);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(radius + 6, -radius - 6);
-            ctx.lineTo(-radius - 6, radius + 6);
-            ctx.stroke();
-            ctx.restore();
-        }
-
-        // Reverse controls ring
-        const reverseState = this.activeEffects && this.activeEffects.reverse;
-        if(reverseState){
-            const color = (reverseState.meta && reverseState.meta.color) || BUFF_COLORS.reverse;
-            drawEffectRing(ctx, this.x, this.y, radius + 6, color, { lineWidth: 3, alpha: 0.75, dash: [5, 6] });
-        }
-
-        // Giant enemy ring
-        const giantState = this.activeEffects && this.activeEffects.giantEnemy;
-        if(giantState){
-            const color = (giantState.meta && giantState.meta.color) || BUFF_COLORS.giantEnemy;
-            drawEffectRing(ctx, this.x, this.y, radius + 16, color, { lineWidth: 5, alpha: 0.6, glow: true });
-        }
-
-        const poisonState = this.activeEffects && this.activeEffects.poison;
-        if(poisonState){
-            const color = (poisonState.meta && poisonState.meta.color) || BUFF_COLORS.poison;
-            const innerRadius = radius - 3;
-            if(innerRadius > 4){
-                ctx.save();
-                ctx.globalAlpha = 0.35;
-                ctx.fillStyle = color;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, innerRadius, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
-            }
-            drawEffectRing(ctx, this.x, this.y, radius + 4, color, { lineWidth: 2, alpha: 0.55, dash: [3,3] });
-        }
-
-        // Root chains
-        const rootState = this.activeEffects && this.activeEffects.root;
-        if(rootState){
-            const color = (rootState.meta && rootState.meta.color) || BUFF_COLORS.root;
-            drawChainAround(ctx, this.x, this.y, radius + 5, color, 12);
-        }
-
-        const drawHUD = this.hp > 0 && !this.pendingRemoval && !this.invisible && !this.isClone;
-        if (drawHUD) {
-        const hpWidth = 48, hpHeight = 6;
-        const hpX = this.x - hpWidth / 2;
-            const hpY = this.y + radius + 12;
-        const hpPerc = Math.max(0, Math.min(1, this.hp / this.maxHp));
-
-        ctx.fillStyle = '#273344';
-        ctx.fillRect(hpX, hpY, hpWidth, hpHeight);
-        ctx.strokeStyle = '#0b0f18';
-        ctx.strokeRect(hpX, hpY, hpWidth, hpHeight);
-        ctx.fillStyle = this.color;
-        ctx.fillRect(hpX + 1, hpY + 1, (hpWidth - 2) * hpPerc, hpHeight - 2);
-
-        // Fixed width ammo bar same as health bar
-        const ammoWidth = hpWidth; // Same width as health bar
-        const ammoHeight = 5;
-        const ammoX = this.x - ammoWidth / 2;
-        const ammoY = hpY + hpHeight + 6;
-        
-        // Background
-        ctx.fillStyle = '#273344';
-        ctx.fillRect(ammoX, ammoY, ammoWidth, ammoHeight);
-        ctx.strokeStyle = '#0b0f18';
-        ctx.strokeRect(ammoX, ammoY, ammoWidth, ammoHeight);
-        
-        // Ammo fill
-        const ammoPercent = this.ammo / (this.maxAmmo || 3);
-        const fillWidth = ammoWidth * ammoPercent;
-        ctx.fillStyle = '#21d0ff';
-        ctx.fillRect(ammoX + 1, ammoY + 1, fillWidth - 2, ammoHeight - 2);
-        if(this.statusText){
-            ctx.save();
-            ctx.font = '600 12px Inter, system-ui';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            const txt = this.statusText;
-            const textWidth = ctx.measureText(txt).width;
-            const padX = 12;
-            const boxW = textWidth + padX * 2;
-            const boxH = 18;
-            const boxX = this.x - boxW / 2;
-            const boxY = ammoY + ammoHeight + 8;
-            ctx.fillStyle = 'rgba(13,22,36,0.82)';
-            roundRect(ctx, boxX, boxY, boxW, boxH, 9, true, false);
-            ctx.strokeStyle = this.statusColor || '#eaf2ff';
-            ctx.lineWidth = 1.5;
-            roundRect(ctx, boxX, boxY, boxW, boxH, 9, false, true);
-            ctx.fillStyle = this.statusColor || '#eaf2ff';
-            ctx.fillText(txt, this.x, boxY + boxH/2);
-            ctx.restore();
-        }
+        // --- Vẽ các hiệu ứng và HUD ---
+        drawTankEffects(ctx, this);
+        drawTankHUD(ctx, this);
     }
 
-    }
     canShoot(now){
         if(this.silenced) return false;
-        return now-this.lastShot>=this.reload;
+        return now - this.lastShot >= this.reload;
     }
+
     shoot(now){
-    if(this.ammo<=0) return;
-
-            if(this.poisonBullet){
-                const color = BUFF_COLORS.poison;
-                const pulse = 1 + Math.sin(this.effectPhase * 3) * 0.5;
-                drawEffectRing(ctx, this.x, this.y, radius + 8 + pulse, color, { lineWidth: 3, alpha: 0.6 });
-                drawEffectRing(ctx, this.x, this.y, radius + 12 + pulse, color, { lineWidth: 1.5, alpha: 0.35, dash: [2,4] });
-            }
-
-            if(this.silenced){
-                const color = BUFF_COLORS.silence;
-                const pulse = 1 + Math.sin(this.effectPhase * 4) * 0.4;
-                drawEffectRing(ctx, this.x, this.y, radius + 10 + pulse, color, { lineWidth: 2.5, alpha: 0.8, dash: [3,3], glow: true });
-                ctx.save();
-                ctx.translate(this.x, this.y);
-                ctx.rotate(this.angle);
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.moveTo(-radius - 6, -radius - 6);
-                ctx.lineTo(radius + 6, radius + 6);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.moveTo(radius + 6, -radius - 6);
-                ctx.lineTo(-radius - 6, radius + 6);
-                ctx.stroke();
-                ctx.restore();
-            }
-
-            // Reverse controls ring
-            const reverseState = this.activeEffects && this.activeEffects.reverse;
-            if(reverseState){
-                const color = (reverseState.meta && reverseState.meta.color) || BUFF_COLORS.reverse;
-                drawEffectRing(ctx, this.x, this.y, radius + 6, color, { lineWidth: 3, alpha: 0.75, dash: [5, 6] });
-            }
-
-            // Giant enemy ring
-            const giantState = this.activeEffects && this.activeEffects.giantEnemy;
-            if(giantState){
-                const color = (giantState.meta && giantState.meta.color) || BUFF_COLORS.giantEnemy;
-                drawEffectRing(ctx, this.x, this.y, radius + 16, color, { lineWidth: 5, alpha: 0.6, glow: true });
-            }
-
-            const poisonState = this.activeEffects && this.activeEffects.poison;
-            if(poisonState){
-                const color = (poisonState.meta && poisonState.meta.color) || BUFF_COLORS.poison;
-                const innerRadius = radius - 3;
-                if(innerRadius > 4){
-                    ctx.save();
-                    ctx.globalAlpha = 0.35;
-                    ctx.fillStyle = color;
-                    ctx.beginPath();
-                    ctx.arc(this.x, this.y, innerRadius, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.restore();
-                }
-                drawEffectRing(ctx, this.x, this.y, radius + 4, color, { lineWidth: 2, alpha: 0.55, dash: [3,3] });
-            }
-
-            // Root chains
-            const rootState = this.activeEffects && this.activeEffects.root;
-            if(rootState){
-                const color = (rootState.meta && rootState.meta.color) || BUFF_COLORS.root;
-                drawChainAround(ctx, this.x, this.y, radius + 5, color, 12);
-            }
-
-            const drawHUD = this.hp > 0 && !this.pendingRemoval && !this.invisible && !this.isClone;
-            if (drawHUD) {
-            const hpWidth = 48, hpHeight = 6;
-            const hpX = this.x - hpWidth / 2;
-                const hpY = this.y + radius + 12;
-            const hpPerc = Math.max(0, Math.min(1, this.hp / this.maxHp));
-
-            ctx.fillStyle = '#273344';
-            ctx.fillRect(hpX, hpY, hpWidth, hpHeight);
-            ctx.strokeStyle = '#0b0f18';
-            ctx.strokeRect(hpX, hpY, hpWidth, hpHeight);
-            ctx.fillStyle = this.color;
-            ctx.fillRect(hpX + 1, hpY + 1, (hpWidth - 2) * hpPerc, hpHeight - 2);
-
-            // Fixed width ammo bar same as health bar
-            const ammoWidth = hpWidth; // Same width as health bar
-            const ammoHeight = 5;
-            const ammoX = this.x - ammoWidth / 2;
-            const ammoY = hpY + hpHeight + 6;
-            
-            // Background
-            ctx.fillStyle = '#273344';
-            ctx.fillRect(ammoX, ammoY, ammoWidth, ammoHeight);
-            ctx.strokeStyle = '#0b0f18';
-            ctx.strokeRect(ammoX, ammoY, ammoWidth, ammoHeight);
-            
-            // Ammo fill
-            const ammoPercent = this.ammo / (this.maxAmmo || 3);
-            const fillWidth = ammoWidth * ammoPercent;
-            ctx.fillStyle = '#21d0ff';
-            ctx.fillRect(ammoX + 1, ammoY + 1, fillWidth - 2, ammoHeight - 2);
-            if(this.statusText){
-                ctx.save();
-                ctx.font = '600 12px Inter, system-ui';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                const txt = this.statusText;
-                const textWidth = ctx.measureText(txt).width;
-                const padX = 12;
-                const boxW = textWidth + padX * 2;
-                const boxH = 18;
-                const boxX = this.x - boxW / 2;
-                const boxY = ammoY + ammoHeight + 8;
-                ctx.fillStyle = 'rgba(13,22,36,0.82)';
-                roundRect(ctx, boxX, boxY, boxW, boxH, 9, true, false);
-                ctx.strokeStyle = this.statusColor || '#eaf2ff';
-                ctx.lineWidth = 1.5;
-                roundRect(ctx, boxX, boxY, boxW, boxH, 9, false, true);
-                ctx.fillStyle = this.statusColor || '#eaf2ff';
-                ctx.fillText(txt, this.x, boxY + boxH/2);
-                ctx.restore();
-            }
-        }
-
-        }
-        canShoot(now){
-            if(this.silenced) return false;
-            return now-this.lastShot>=this.reload;
-        }
-        shoot(now){
         if(this.ammo<=0) return;
         this.ammo--; this.lastShot=now;
         const offset=this.r + 6;
@@ -601,7 +281,16 @@ class Tank{
         const by=this.y + Math.sin(this.angle)*offset;
 
         const bullet = new Bullet(bx, by, this.angle, this);
-        styleBulletForOwner(bullet, this);
+        styleBulletForOwner(bullet, this); // Thêm lại dòng này
+        const baseDamage = bullet.damage || this.damage || 1;
+        const damageMultiplier = this.damageMultiplier || 1;
+        const corrosiveFactor = this.isInCorrosiveGel ? (this.corrosiveDamageFactor || 1) : 1;
+        bullet.damage = baseDamage * damageMultiplier * corrosiveFactor;
+        // Gán mục tiêu đã khóa cho viên đạn
+        if (this.homingTarget) {
+            bullet.homingTarget = this.homingTarget;
+        }
+
         this.applyBossBulletTraits(bullet);
         this.recordBossShot();
 
@@ -618,7 +307,7 @@ class Tank{
         return bullet;
     }
 
-        applyBossBulletTraits(bullet) {
+    applyBossBulletTraits(bullet) {
         if (!bullet) return;
         if (this.bossPierceStacks > 0) {
             if (!bullet._bossPierceState) {
@@ -716,13 +405,14 @@ class Tank{
     }
 
     reset() {
-        const activeEffects = this.activeEffects;
-        if (activeEffects) {
-            Object.values(activeEffects).forEach(effect => {
-                if (!effect) return;
-                effect.cancelled = true;
-                if (effect.timeout) clearTimeout(effect.timeout);
-            });
+        // Hủy tất cả các hiệu ứng đang hoạt động một cách chính xác
+        // Điều này sẽ kích hoạt hàm onEnd của mỗi hiệu ứng để dọn dẹp
+        if (this.activeEffects) {
+            for (const effectName in this.activeEffects) {
+                const effect = this.activeEffects[effectName];
+                if (effect && effect.timeout) clearTimeout(effect.timeout);
+                if (effect && effect.onEnd) effect.onEnd(effect);
+            }
         }
         this.activeEffects = {};
         this.speed = 0;
@@ -739,19 +429,7 @@ class Tank{
             this.maxHp = 3;
             this.bulletSpeedMultiplier = 1;
         }
-        
-        this.homing = false;
-        this.invisible = false;
-        this.shield = false;
-        this.shotgun = false;
-        this.trailBullet = false;
-        this.pierce = false;
-        this.fury = false;
-        this.ricochet = false; // Was 'bounce'
-        this.poisonBullet = false;
-        this.bigBullet = false;
-        this.explosive = false;
-        this.isBurning = false;
+
         this.healPulseTimer = 0;
         this.lifeStealPulseTimer = 0;
         this.displayRadius = this.r;
@@ -764,6 +442,9 @@ class Tank{
         this.microShieldMax = 0;
         this.microShieldValue = 0;
         this.microShieldNextRegen = 0;
+        this.isInCorrosiveGel = false;
+        this.corrosiveDamageFactor = 1;
+        this.lastCorrosiveTick = 0;
     }
     
     drawMiniSlime(ctx) {

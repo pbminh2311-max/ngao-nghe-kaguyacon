@@ -1,6 +1,6 @@
 import { flashMsg, toggleDevMode } from '../main.js';
 import { updateGameModeUI } from '../game/bossMode.js';
-import { spawnBot } from '../game/gameController.js';
+import { spawnBot } from '../game/devTools.js';
 import { devMode, setDevMode, p1, p2, boss, gameMode, p1FocusMode, setP1FocusMode, p2FocusMode, setP2FocusMode } from '../state.js';
 
 const settingsPanel = document.getElementById('settingsPanel');

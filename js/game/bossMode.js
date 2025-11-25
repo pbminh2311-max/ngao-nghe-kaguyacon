@@ -8,8 +8,7 @@ import {
 
 import { W, H } from '../canvas.js';
 import { showStatus } from '../systems/effects.js';
-import { getBossBuffName } from '../utils.js';
-import { resetAfterKill } from './gameController.js';
+import { getBossBuffName } from '../utils.js';import { resetAfterKill, spawnMiniTankCompanion } from './gameState.js';
 import { bossModeBuffs, BUFF_COLORS, bossModeBuffWeights, bossBuffRarities } from '../constants.js';
 
 import Boss from '../classes/Boss.js';
@@ -38,7 +37,7 @@ const gameModeInfo = document.getElementById('gameModeInfo');
 const floorInfo = document.getElementById('floorInfo');
 const permanentBuffsInfo = document.getElementById('permanentBuffsInfo');
 
-const STACKABLE_BOSS_BUFFS = new Set(['bounceShot', 'bossPierce']);
+const STACKABLE_BOSS_BUFFS = new Set(['bounceShot', 'bossPierce', 'damageBoost', 'maxHpUp', 'debuffResistance', 'luckUp']);
 
 export function isStackableBossBuff(buffType) {
     return STACKABLE_BOSS_BUFFS.has(buffType);
@@ -84,10 +83,18 @@ function ensureBossBuffStats(target) {
             shieldActive: false,
             shieldReady: false,
             slowMotionActive: false,
-            fireIceShot: false
+            fireIceShot: false,
+            damageBoostStacks: 0,
+            maxHpUpStacks: 0,
+            hasBulletDeflect: false,
+            debuffResistance: 0,
+            luckUpStacks: 0,
+            hasMiniTank: false,
+            hasDoubleShot: false
         };
     } else {
         const stats = target.bossBuffStats;
+
         if (typeof stats.baseDamage === 'undefined') stats.baseDamage = target.damage ?? 1;
         if (typeof stats.baseMaxHp === 'undefined') stats.baseMaxHp = target.maxHp ?? 3;
         if (typeof stats.baseMoveSpeed === 'undefined') stats.baseMoveSpeed = target.baseMoveSpeed || target.moveSpeed || 0.5;
@@ -114,6 +121,13 @@ function ensureBossBuffStats(target) {
         if (typeof stats.shieldReady === 'undefined') stats.shieldReady = false;
         if (typeof stats.slowMotionActive === 'undefined') stats.slowMotionActive = false;
         if (typeof stats.fireIceShot === 'undefined') stats.fireIceShot = false;
+        if (typeof stats.damageBoostStacks === 'undefined') stats.damageBoostStacks = 0;
+        if (typeof stats.maxHpUpStacks === 'undefined') stats.maxHpUpStacks = 0;
+        if (typeof stats.hasBulletDeflect === 'undefined') stats.hasBulletDeflect = false;
+        if (typeof stats.debuffResistance === 'undefined') stats.debuffResistance = 0;
+        if (typeof stats.luckUpStacks === 'undefined') stats.luckUpStacks = 0;
+        if (typeof stats.hasMiniTank === 'undefined') stats.hasMiniTank = false;
+        if (typeof stats.hasDoubleShot === 'undefined') stats.hasDoubleShot = false;
     }
 
     return target.bossBuffStats;
@@ -140,10 +154,18 @@ function updateBossBuffDerivedStats(target) {
     const stats = ensureBossBuffStats(target);
     if (!stats) return;
 
-    target.damage = stats.baseDamage;
+    const damageBoostStacks = stats.damageBoostStacks || 0;
+    const damageMultiplier = 1 + damageBoostStacks * 0.2;
+    target.damage = stats.baseDamage * damageMultiplier;
+    target.damageBoostMultiplier = damageMultiplier;
 
-    target.maxHp = stats.baseMaxHp;
-    target.hp = Math.min(target.hp, target.maxHp);
+    const maxHpStacks = stats.maxHpUpStacks || 0;
+    const maxHpMultiplier = Math.pow(1.2, maxHpStacks);
+
+    const prevMaxHp = target.maxHp || stats.baseMaxHp;
+    const hpRatio = prevMaxHp > 0 ? Math.min(1, target.hp / prevMaxHp) : 1;
+    target.maxHp = stats.baseMaxHp * maxHpMultiplier;
+    target.hp = Math.min(target.maxHp, target.maxHp * hpRatio);
 
     const moveStacks = stats.moveSpeedStacks || 0;
     const moveMultiplier = Math.pow(1.3, moveStacks); // Tăng 30% tốc độ di chuyển
@@ -193,7 +215,15 @@ function updateBossBuffDerivedStats(target) {
     target.hasBossShield = !!stats.shieldActive;
     target.bossShieldReady = !!stats.shieldReady;
     target.hasFireIceShot = !!stats.fireIceShot;
-    target.bossIceSlowFactor = 1;
+    target.hasBulletDeflect = !!stats.hasBulletDeflect;
+    target.hasDoubleShot = !!stats.hasDoubleShot;
+    target.debuffResistance = Math.min(0.7, stats.debuffResistance || 0);
+    target.debuffDurationMultiplier = Math.max(0.3, 1 - target.debuffResistance);
+    target.luckUpStacks = stats.luckUpStacks || 0;
+    target.hasMiniTankBuff = !!stats.hasMiniTank;
+    if (!target.hasMiniTankBuff && target.miniTankCompanion) {
+        target.miniTankCompanion.pendingRemoval = true;
+    }
 
     if (stats.microShieldEnabled && stats.microShieldStrength > 0) {
         target.microShieldEnabled = true;
@@ -209,6 +239,10 @@ function updateBossBuffDerivedStats(target) {
 
     if (stats.slowMotionActive) {
         // slow effect handled globally
+    }
+
+    if (target.hasMiniTankBuff) {
+        spawnMiniTankCompanion(target);
     }
 
     recalcEnemySlowFactor();
@@ -346,6 +380,53 @@ function applyBossBuffToTarget(target, buffType, { silent = false } = {}) {
             color = BUFF_COLORS.fireIceShot;
             break;
         }
+        case 'damageBoost': {
+            stats.damageBoostStacks = (stats.damageBoostStacks || 0) + 1;
+            const pct = Math.round(stats.damageBoostStacks * 20);
+            message = `💪 Sát thương +20% (tổng +${pct}%)`;
+            color = BUFF_COLORS.damageBoost;
+            break;
+        }
+        case 'maxHpUp': {
+            stats.maxHpUpStacks = (stats.maxHpUpStacks || 0) + 1;
+            const totalPct = Math.round((Math.pow(1.2, stats.maxHpUpStacks) - 1) * 100);
+            message = `❤️ Max HP +20% (tổng +${totalPct}%)`;
+            color = BUFF_COLORS.maxHpUp;
+            break;
+        }
+        case 'bulletDeflect': {
+            stats.hasBulletDeflect = true;
+            message = '🛡️ Phản xạ đạn Boss';
+            color = BUFF_COLORS.bulletDeflect;
+            break;
+        }
+        case 'debuffResistance': {
+            const current = stats.debuffResistance || 0;
+            const next = Math.min(0.7, current + 0.1);
+            stats.debuffResistance = next;
+            message = `🧬 Giảm ${Math.round(next * 100)}% thời gian debuff`;
+            color = BUFF_COLORS.debuffResistance;
+            break;
+        }
+        case 'luckUp': {
+            stats.luckUpStacks = (stats.luckUpStacks || 0) + 1;
+            const bonus = stats.luckUpStacks * 3;
+            message = `🍀 Tăng ${bonus}% tỉ lệ buff hiếm`;
+            color = BUFF_COLORS.luckUp;
+            break;
+        }
+        case 'miniTank': {
+            stats.hasMiniTank = true;
+            message = '🤖 Triệu hồi xe tăng mini trợ chiến';
+            color = BUFF_COLORS.miniTank;
+            break;
+        }
+        case 'doubleShot': {
+            stats.hasDoubleShot = true;
+            message = '➿ Mỗi phát bắn ra 2 viên song song';
+            color = BUFF_COLORS.doubleShot;
+            break;
+        }
         default:
             break;
     }
@@ -415,7 +496,14 @@ export function startBossMode() {
             shieldActive: false,
             shieldReady: false,
             slowMotionActive: false,
-            fireIceShot: false
+            fireIceShot: false,
+            damageBoostStacks: 0,
+            maxHpUpStacks: 0,
+            hasBulletDeflect: false,
+            debuffResistance: 0,
+            luckUpStacks: 0,
+            hasMiniTank: false,
+            hasDoubleShot: false
         };
         player.lifeStealAmount = 0;
         player.bossBounceCount = 0;
@@ -543,18 +631,30 @@ function getRandomBossBuffs(count) {
 
     const pool = [...availablePool];
     const weights = { ...bossModeBuffWeights };
+    const luckBonusMultiplier = 1 + getLuckUpBonus();
+    const rarityRank = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4, mythical: 5 };
+
+    const getWeightedChance = buff => {
+        const base = weights[buff] || 1;
+        const rarity = bossBuffRarities[buff] || 'common';
+        if (rarityRank[rarity] >= rarityRank['rare']) {
+            return base * luckBonusMultiplier;
+        }
+        return base;
+    };
 
     for (let i = 0; i < count && pool.length > 0; i++) {
-        const totalWeight = pool.reduce((sum, buff) => sum + (weights[buff] || 1), 0);
+        const totalWeight = pool.reduce((sum, buff) => sum + getWeightedChance(buff), 0);
         let roll = Math.random() * totalWeight;
         let choice = pool[0];
         for (const buff of pool) {
-            roll -= (weights[buff] || 1);
+            roll -= getWeightedChance(buff);
             if (roll <= 0) {
                 choice = buff;
                 break;
             }
         }
+
         selected.push(choice);
         pool.splice(pool.indexOf(choice), 1);
     }
@@ -573,7 +673,6 @@ function selectBossBuff(buffIndex) {
     bossMode.currentFloor++;
     updateGameModeUI();
     setTimeout(() => {
-        resetAfterKill();
         spawnBossForFloor(bossMode.currentFloor);
     }, 1000);
 }
@@ -589,6 +688,43 @@ export function reapplyPermanentBuffs() {
     [p1, p2].forEach(player => {
         if (!player) return;
         const stats = ensureBossBuffStats(player);
+
+        // Reset bossBuffStats về trạng thái ban đầu
+        Object.assign(stats, {
+            baseDamage: player.damage ?? 1,
+            baseMaxHp: player.maxHp ?? 3,
+            baseMoveSpeed: player.baseMoveSpeed || player.moveSpeed || 0.5,
+            baseBulletSpeed: player.bulletSpeedMultiplier ?? 1,
+            baseReload: player.baseReload || player.reload || 320,
+            baseReloadRate: player.baseReloadRate || player.reloadRate || (1 / 60),
+            lifeSteal: 0,
+            bounceExtra: 0,
+            pierceExtra: 0,
+            fireRateStacks: 0,
+            moveSpeedStacks: 0,
+            twinShot: false,
+            magnetRadius: 0,
+            bounceDamageFactor: null,
+            pierceDamagePenalty: null,
+            shotSplit: false,
+            shotSplit4: false,
+            ricochetTracking: false,
+            poisonShot: false,
+            microShieldEnabled: false,
+            microShieldStrength: 0,
+            criticalHit: false,
+            shieldActive: false,
+            shieldReady: false,
+            slowMotionActive: false,
+            fireIceShot: false,
+            damageBoostStacks: 0,
+            maxHpUpStacks: 0,
+            hasBulletDeflect: false,
+            debuffResistance: 0,
+            luckUpStacks: 0,
+            hasMiniTank: false,
+            hasDoubleShot: false
+        });
 
         player.damage = stats.baseDamage;
 
@@ -611,27 +747,6 @@ export function reapplyPermanentBuffs() {
         player.twinShotShotCount = 0;
         player.twinShotBonusCharges = 0;
         player.bossMagnetRadius = 0;
-
-        stats.lifeSteal = 0;
-        stats.bounceExtra = 0;
-        stats.pierceExtra = 0;
-        stats.fireRateStacks = 0;
-        stats.moveSpeedStacks = 0;
-        stats.twinShot = false;
-        stats.magnetRadius = 0;
-        stats.bounceDamageFactor = null;
-        stats.pierceDamagePenalty = null;
-        stats.shotSplit = false;
-        stats.shotSplit4 = false;
-        stats.ricochetTracking = false;
-        stats.poisonShot = false;
-        stats.microShieldEnabled = false;
-        stats.microShieldStrength = 0;
-        stats.criticalHit = false;
-        stats.shieldActive = false;
-        stats.shieldReady = false;
-        stats.slowMotionActive = false;
-        stats.fireIceShot = false;
 
         updateBossBuffDerivedStats(player);
     });
@@ -705,12 +820,26 @@ function getBossBuffDescription(buffType) {
         ricochetTracking: 'Sau lần nảy đầu, đạn sẽ tự điều chỉnh về kẻ địch',
         poisonShot: 'Gây độc 3s (20% dmg/s), tối đa 3 stack (+1s & +10%/s mỗi stack)',
         microShield: 'Nhận lá chắn =20% HP, tự hồi sau 5s không nhận sát thương',
-        bossShield: 'Khiên chắn 1 đòn mỗi round (không chặn sát thương DoT)',
+        bossShield: '🛡️ Khiên chắn 1 đòn mỗi round (không chặn sát thương DoT)',
         slowMotion10: 'Làm chậm Boss và đạn địch 20% trong round',
         fireIceShot: 'Mỗi viên đạn ngẫu nhiên gây cháy hoặc làm chậm mục tiêu',
-        criticalHit: '10% cơ hội gây chí mạng x2 sát thương'
+        criticalHit: '10% cơ hội gây chí mạng x2 sát thương',
+        damageBoost: 'Tăng 20% sát thương, cộng dồn không giới hạn',
+        maxHpUp: 'Tăng 20% máu tối đa, cộng dồn không giới hạn',
+        bulletDeflect: 'Phản xạ đạn Boss, trả sát thương lại Boss',
+        debuffResistance: 'Giảm 10% thời gian debuff nhận vào (tối đa 70%)',
+        luckUp: 'Tăng 3% tỉ lệ buff hiếm mỗi stack',
+        miniTank: 'Triệu hồi xe tăng mini 1/3 chỉ số hỗ trợ suốt round',
+        doubleShot: 'Mỗi lần bắn tạo 2 viên đạn song song'
     };
     return descriptions[buffType] || 'Unknown buff';
+}
+
+function getLuckUpBonus() {
+    return [p1, p2].reduce((acc, player) => {
+        if (!player || !player.bossBuffStats) return acc;
+        return acc + ((player.bossBuffStats.luckUpStacks || 0) * 0.03);
+    }, 0);
 }
 
 export function showBossGameOver() {
@@ -736,6 +865,7 @@ function handleRetryBoss() {
     setTimeout(() => {
         resetAfterKill();
         flashMsg(`Thử lại - Tầng ${bossMode.currentFloor}`);
+        reapplyPermanentBuffs(); // Áp dụng lại buff sau khi reset
     }, 200);
 }
 

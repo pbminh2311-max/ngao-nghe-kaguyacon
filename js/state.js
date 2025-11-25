@@ -4,6 +4,8 @@ import Tank from './classes/Tank.js';
 export const p1 = new Tank(110, 110, '#6fe', {
     forward: 'w', back: 's', left: 'a', right: 'd', shoot: ' '
 });
+p1.bulletColor = '#f86';
+
 export const p2 = new Tank(790, 450, '#f86', {
     forward: 'ArrowUp', back: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', shoot: 'Enter'
 });

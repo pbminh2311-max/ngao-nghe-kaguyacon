@@ -1,6 +1,6 @@
 import { flashMsg } from '../main.js';
 import { toggleInstructionsPanel, toggleSettingsPanel } from './settings.js';
-import { resetAfterKill } from '../game/gameController.js';
+import { resetAfterKill } from '../game/gameState.js';
 import { gameMode, setGameMode } from '../state.js';
 import { startBossMode, exitBossMode } from '../game/bossMode.js';
 

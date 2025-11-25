@@ -1,481 +1,26 @@
 import {
-    flashMsg, BUFF_COLORS
-} from '../main.js';
-import {
     p1, p2, tanks, boss, setBoss, bullets, buffs,
-    gameMode, devGodMode, setDevGodMode, devNoWalls, setDevNoWalls, devOneHitKill, setDevOneHitKill,
-    scoreP1, scoreP2, setScore, setOverlay, roundEnding, setRoundEnding,
-    buffTimer, setBuffTimer, ObjectPools, setTanks, setBullets, setBuffs
+    gameMode, buffTimer, setBuffTimer, devGodMode
 } from '../state.js';
 import { W, H } from '../canvas.js';
-import { CHARGE_HOLD_TIME, CHARGE_AMMO_COST } from '../config.js';
-import { input } from './input.js';
-import { addExplosion, addHitExplosion, addPickupFX, trails, clearAnimations } from '../rendering/animations.js';
-import Bullet from '../classes/Bullet.js';
-import Boss from '../classes/Boss.js';
-import Tank from '../classes/Tank.js';
 import Buff from '../classes/Buff.js';
+import Bullet from '../classes/Bullet.js';
+import { flashMsg } from '../main.js';
 import { dist, clamp } from '../utils.js';
-import { lineCircleColl, circleColl, pointToLineDistanceSq, circleRectColl } from './collision.js';
+import { circleRectColl, circleColl } from './collision.js';
 import { obstacles, randomObstacles, clearObstacles } from './obstacles.js';
 import { showStatus, applyPoisonEffect, applyEffect, tagEffect } from '../systems/effects.js';
 import { BuffFactory } from '../systems/buffs.js';
-import { bossMode, exitBossMode, showBuffSelection, reapplyPermanentBuffs, applyBossModeBuff, showBossGameOver } from './bossMode.js';
-import { buffTypes } from '../constants.js';
-import { spawnShotSplitChildren, triggerShotSplit4 } from '../utils/shotSplit.js';
-import { applyStatSettings, syncSettingsUI } from '../ui/settings.js';
+import { buffTypes, BUFF_COLORS } from '../constants.js';
+import { handlePlayerShooting } from './shooting.js';
+import { handleBulletCollisions } from './damage.js';
+import { checkWinConditions } from './gameState.js';
+import { pointToLineDistanceSq } from './collision.js';
+import { trails, addPickupFX, triggerNukeAnimation, addExplosion } from '../rendering/animations.js';
+import { ObjectPools } from '../state.js';
+import { addSlimePuddle, updateSlimePuddles, getCorrosivePuddleAt } from './slimeHazards.js';
 
-const FIRE_BURN_DURATION = 2000;
-const FIRE_BURN_RATIO = 0.5;
-const ICE_SLOW_DURATION = 2500;
-const ICE_SLOW_MULTIPLIER = 0.7;
-const POISON_SHOT_BASE_DURATION = 3000;
-const POISON_SHOT_BASE_RATIO = 0.2;
-const POISON_SHOT_STACK_DURATION = 1000;
-const POISON_SHOT_STACK_RATIO = 0.1;
-const POISON_SHOT_MAX_STACK = 3;
-
-function applyFireShotEffect(target, baseDamage) {
-    if (!target) return;
-    const damageValue = Math.max(0, baseDamage || 0);
-    if (damageValue <= 0) return;
-    const burnPerMs = (damageValue * FIRE_BURN_RATIO) / 1000;
-    const effect = applyEffect(target, 'bossFireShotBurn', FIRE_BURN_DURATION,
-        state => {
-            state.burnPerMs = burnPerMs;
-            state.elapsed = 0;
-            target.isBurning = true;
-        },
-        () => {
-            target.isBurning = false;
-        },
-        (dt, tank, state) => {
-            if (!state || state.cancelled || dt <= 0) return;
-            const isPlayer = (tank === p1 || tank === p2);
-            if (devGodMode && isPlayer) return;
-            let damage = state.burnPerMs * dt;
-            if (damage <= 0 || tank.hp <= 0) return;
-            damage = absorbDamageWithMicroShield(tank, damage, performance.now());
-            if (damage <= 0) return;
-            tank.hp = Math.max(0, tank.hp - damage);
-        }
-    );
-    if (effect) {
-        effect.burnPerMs = burnPerMs;
-        showStatus(target, ' Đốt cháy!', BUFF_COLORS.fireIceShot || '#f472b6', 800);
-        tagEffect(effect, 'Fire Shot', BUFF_COLORS.fireIceShot || '#f472b6');
-    }
-}
-
-function applyIceShotEffect(target) {
-    if (!target) return;
-
-    const effect = applyEffect(target, 'bossIceShotSlow', ICE_SLOW_DURATION,
-        state => {
-            state.previousFactor = typeof target.bossIceSlowFactor === 'number' ? target.bossIceSlowFactor : 1;
-            target.bossIceSlowFactor = state.previousFactor * ICE_SLOW_MULTIPLIER;
-            target.isIceSlowed = true;
-        },
-        state => {
-            if (!state) return;
-            const base = typeof state.previousFactor === 'number' ? state.previousFactor : 1;
-            target.bossIceSlowFactor = base;
-            target.isIceSlowed = false;
-        }
-    );
-    if (effect) {
-        if (typeof effect.previousFactor !== 'number') {
-            effect.previousFactor = typeof target.bossIceSlowFactor === 'number'
-                ? target.bossIceSlowFactor / ICE_SLOW_MULTIPLIER
-                : 1;
-        }
-        target.bossIceSlowFactor = effect.previousFactor * ICE_SLOW_MULTIPLIER;
-        showStatus(target, '❄️ Bị làm chậm!', BUFF_COLORS.fireIceShot || '#f472b6', 800);
-        tagEffect(effect, 'Ice Shot', BUFF_COLORS.fireIceShot || '#f472b6');
-    }
-}
-
-function applyBossPoisonShotEffect(target, baseDamage = 1) {
-    if (!target || target.hp <= 0) return;
-    if (devGodMode && (target === p1 || target === p2)) return;
-
-    const base = Math.max(0.1, baseDamage);
-    const existing = target.activeEffects ? target.activeEffects.bossPoisonShot : null;
-    const prevStack = existing ? (existing.stack || 0) : 0;
-    const newStack = Math.min(POISON_SHOT_MAX_STACK, prevStack + 1);
-    const duration = POISON_SHOT_BASE_DURATION + (newStack - 1) * POISON_SHOT_STACK_DURATION;
-    const dpsRatio = POISON_SHOT_BASE_RATIO + (newStack - 1) * POISON_SHOT_STACK_RATIO;
-    const damagePerSecond = base * dpsRatio;
-
-    const effect = applyEffect(target, 'bossPoisonShot', duration,
-        state => {
-            state.stack = newStack;
-            state.damagePerSecond = damagePerSecond;
-            state.meta = state.meta || {};
-            state.meta.color = BUFF_COLORS.poisonShot || '#bbf7d0';
-            state.meta.label = `Độc x${newStack}`;
-        },
-        state => {
-            if (state) state.stack = 0;
-        },
-        (dt, tank, state) => {
-            if (!state || state.cancelled || dt <= 0) return;
-            if (tank.shield) return;
-            const isPlayer = (tank === p1 || tank === p2);
-            if (devGodMode && isPlayer) return;
-            let damage = (state.damagePerSecond || 0) * dt / 1000;
-            if (damage <= 0 || tank.hp <= 0) return;
-            damage = absorbDamageWithMicroShield(tank, damage, performance.now());
-            if (damage <= 0) return;
-            tank.hp = Math.max(0, tank.hp - damage);
-        }
-    );
-
-    if (effect) {
-        effect.stack = newStack;
-        effect.damagePerSecond = damagePerSecond;
-        effect.meta = effect.meta || {};
-        effect.meta.color = BUFF_COLORS.poisonShot || '#bbf7d0';
-        effect.meta.label = `Độc x${newStack}`;
-        showStatus(target, `☠️ Độc x${newStack}`, BUFF_COLORS.poisonShot || '#bbf7d0', 900);
-    }
-}
-
-function absorbDamageWithMicroShield(target, incomingDamage, now) {
-    if (!target || !target.microShieldEnabled || target.microShieldValue <= 0) return incomingDamage;
-    const absorbed = Math.min(target.microShieldValue, incomingDamage);
-    target.microShieldValue -= absorbed;
-    target.microShieldNextRegen = now + 5000;
-    if (target.microShieldValue <= 0) {
-        target.microShieldValue = 0;
-        showStatus(target, '🧿 Shield vỡ!', BUFF_COLORS.microShield || '#7dd3fc', 600);
-    }
-    return incomingDamage - absorbed;
-}
-
-function fireNormalShot(tank, now) {
-    if (!tank || !tank.canShoot(now)) return false;
-
-    if (tank.shotgun) {
-        // Bắn chùm tốn 3 viên đạn
-        if (tank.ammo < 3) {
-            showStatus(tank, 'Không đủ đạn!', '#ffd166', 800);
-            return false;
-        }
-        tank.ammo -= 3;
-        tank.lastShot = now;
-
-        for (let i = -1; i <= 1; i++) {
-            // Tạo đạn thủ công thay vì gọi tank.shoot() nhiều lần
-            const angleOffset = i * 0.15;
-            const finalAngle = tank.angle + angleOffset;
-            const bullet = new Bullet(tank.x, tank.y, finalAngle, tank);
-            bullet.x += Math.cos(finalAngle) * (tank.r + bullet.r + 1);
-            bullet.y += Math.sin(finalAngle) * (tank.r + bullet.r + 1);
-            bullets.push(bullet);
-        }
-        return true;
-    }
-
-    if (tank.ammo <= 0) return false;
-
-    const isTwinShotBonus = tank.hasTwinShot && tank.twinShotBonusCharges > 0;
-
-    const bullet = tank.shoot(now);
-    if (bullet) {
-        // Xử lý Twin Shot
-        if (isTwinShotBonus) {
-            // Viên đạn đầu tiên
-            bullets.push(bullet);
-
-            // Lưu lại trạng thái bắn để viên đạn thứ 2 bay đúng hướng
-            const fireAngle = tank.angle;
-            const fireX = tank.x;
-            const fireY = tank.y;
-
-            // Bắn viên đạn thứ hai sau một độ trễ ngắn
-            setTimeout(() => {
-                const bonusBullet = tank.createBossBonusBullet(fireAngle, fireX, fireY);
-                if (bonusBullet) bullets.push(bonusBullet);
-            }, 80); // 80ms delay
-
-            tank.twinShotBonusCharges--;
-            showStatus(tank, '✦ Twin Shot!', BUFF_COLORS.twinShot, 800);
-        } else {
-            // Bắn bình thường nếu không có bonus
-            bullets.push(bullet);
-        }
-        return true;
-    }
-    return false;
-}
-
-function fireChargedShot(tank, now) {
-    if (!tank || tank.ammo < CHARGE_AMMO_COST || !tank.canShoot(now)) {
-        showStatus(tank, 'Không đủ đạn!', '#ffd166', 800);
-        return false;
-    }
-
-    // Trừ đạn và reset cooldown
-    tank.ammo = Math.max(0, tank.ammo - CHARGE_AMMO_COST);
-    tank.lastShot = now;
-    tank.shootHoldTime = 0;
-
-    // Tạo viên đạn tụ lực mới
-    const bulletRadius = 10;
-    const safeDist = tank.r + bulletRadius + 1; // Đẩy đạn ra ngoài 1 pixel để tránh va chạm
-    const bx = tank.x + Math.cos(tank.angle) * safeDist;
-    const by = tank.y + Math.sin(tank.angle) * safeDist;
-    const bullet = new Bullet(bx, by, tank.angle, tank);
-
-    // Thiết lập thuộc tính cho đạn tụ lực
-    bullet.damage = Math.max(3, (bullet.damage || 1) * 3);
-    bullet.isCharged = true;
-    bullet.color = '#ffd166';
-    bullet.glow = true;
-    bullet.r = bulletRadius;
-    bullets.push(bullet);
-
-    showStatus(tank, 'Đạn tụ lực', '#ffd166', 900);
-    addHitExplosion({
-        x: tank.x + Math.cos(tank.angle) * (tank.r + 6),
-        y: tank.y + Math.sin(tank.angle) * (tank.r + 6),
-        color: '#ffd166',
-        startTime: performance.now(),
-        duration: 260
-    });
-    return true;
-}
-
-function handlePlayerShooting(dt, now) {
-    for (const t of [p1, p2]) {
-        if (t.possession && !t.possessionFired && t.canShoot(now) && !t.silenced) {
-            const b = t.shoot(now);
-            if (b) bullets.push(b);
-            t.possessionFired = true;
-        }
-
-        const shootKey = t.controls.shoot;
-        const isDown = !!input[shootKey] && !t.possession;
-
-        // Nếu phím đang được giữ
-        if (isDown) {
-            if (!t.wasShootDown) { // Frame đầu tiên nhấn phím
-                t.wasShootDown = true;
-                t.shootHoldTime = 0;
-                t.chargeState = 'charging';
-            }
-            t.shootHoldTime += dt;
-
-            // Hiển thị trạng thái khi đã tụ lực đủ
-            if (t.shootHoldTime >= CHARGE_HOLD_TIME && t.chargeState === 'charging') {
-                t.chargeState = 'armed';
-                showStatus(t, 'Đã tụ lực!', '#ffd166', 900);
-            }
-        } 
-        // Nếu phím được nhả ra
-        else {
-            if (t.wasShootDown) { // Vừa mới nhả phím
-                if (!t.silenced && !t.stunned) {
-                    // Quyết định bắn loại đạn nào dựa trên thời gian giữ phím
-                    if (t.shootHoldTime >= CHARGE_HOLD_TIME) {
-                        fireChargedShot(t, now);
-                    } else {
-                        fireNormalShot(t, now);
-                    }
-                }
-            }
-            t.wasShootDown = false;
-            t.shootHoldTime = 0;
-            t.chargeState = 'idle';
-        }
-    }
-}
-
-function handleBulletCollisions(now) {
-    for (let i = 0; i < bullets.length; i++) {
-        const b = bullets[i];
-        if (!b || !b.alive) continue;
-
-        for (let j = 0; j < tanks.length; j++) {
-            const t = tanks[j];
-            if (!t || t.hp <= 0 || t.invisible) continue;
-
-            const dx = t.x - b.x, dy = t.y - b.y;
-            const maxDist = t.r + (b.r || 4) + Math.hypot(b.vx || 0, b.vy || 0);
-            if (dx * dx + dy * dy > maxDist * maxDist) continue;
-
-            const hitLine = lineCircleColl(b.prevX, b.prevY, b.x, b.y, t.x, t.y, t.r);
-            const hitPoint = circleColl(t, b);
-
-            if (hitLine || hitPoint) {
-                console.log(`[Collision] Bullet from ${b.owner === p1 ? 'P1' : 'P2'} hit tank ${t === p1 ? 'P1' : 'P2'}. Creating explosion.`);
-                if (gameMode === 'vsboss') {
-                    if ((b.owner === p1 || b.owner === p2) && (t === p1 || t === p2)) continue;
-                }
-                if (b.owner instanceof Boss || (b.owner && b.owner.isMiniSlime)) {
-                    if (t instanceof Boss || t.isMiniSlime) continue;
-                }
-                if (b.isPiercing) {
-                    if (!b.piercedTargets) b.piercedTargets = new Set();
-                    if (b.piercedTargets.has(t)) continue;
-                    b.piercedTargets.add(t);
-                }
-
-                const isPlayer = (t === p1 || t === p2);
-                const skipDamage = devGodMode && isPlayer;
-                const baseEffectDamage = b.fireIceSourceDamage || b.damage || 1;
-                addHitExplosion({ x: b.x, y: b.y, color: '#f00', startTime: now });
-
-                let damageDealt = 0;
-                let applyDirectDamage = !skipDamage;
-
-                if (applyDirectDamage && t.hasBossShield && t.bossShieldReady) {
-                    t.bossShieldReady = false;
-                    showStatus(t, '🛡️ Khiên chặn đòn!', BUFF_COLORS.bossShield || '#6ee7b7', 900);
-                    applyDirectDamage = false;
-                }
-
-                if (b.fireIceType === 'fire') {
-                    applyFireShotEffect(t, baseEffectDamage);
-                } else if (b.fireIceType === 'ice') {
-                    applyIceShotEffect(t);
-                }
-
-                if (b.hasPoisonShot) {
-                    const poisonBase = b.poisonShotBaseDamage || baseEffectDamage;
-                    applyBossPoisonShotEffect(t, poisonBase);
-                }
-
-                const shouldTriggerSplit4OnHit = b.hasShotSplit4 && !b._shotSplit4Triggered && t !== b.owner;
-
-                if (!t.shield && applyDirectDamage) {
-                    let damage = Math.max(0.1, b.damage || 1);
-
-                    if (b.criticalMultiplier && b.criticalMultiplier > 1) {
-                        const critColor = BUFF_COLORS.criticalHit || '#fb7185';
-                        damage *= b.criticalMultiplier;
-                        showStatus(t, '💥 Chí mạng!', critColor, 600);
-                        if (b.owner) {
-                            showStatus(b.owner, '💥 Chí mạng!', critColor, 600);
-                        }
-                    }
-
-                    damage = absorbDamageWithMicroShield(t, damage, now);
-
-                    if (damage > 0) {
-                        if (t instanceof Boss && t.damageReduction && t.damageReduction < 1) {
-                            damage *= t.damageReduction;
-                            damage = Math.max(0.1, damage);
-                        }
-                        const prevHp = t.hp;
-                        t.hp = Math.max(0, t.hp - damage);
-                        damageDealt = Math.max(0, prevHp - t.hp);
-                        if (b.isPoison) applyPoisonEffect(t);
-                    }
-                }
-
-                if (shouldTriggerSplit4OnHit) {
-                    triggerShotSplit4(b);
-                }
-
-                if (damageDealt > 0 && b.owner && b.owner.lifeStealAmount > 0 && b.owner.hp > 0) {
-                    const healAmount = damageDealt * b.owner.lifeStealAmount;
-                    if (healAmount > 0) {
-                        const prevHp = b.owner.hp;
-                        const maxHp = b.owner.maxHp || prevHp;
-                        b.owner.hp = Math.min(maxHp, prevHp + healAmount);
-                        if (b.owner.hp > prevHp) {
-                            b.owner.lifeStealPulseTimer = 600;
-                            showStatus(b.owner, 'Hút máu!', BUFF_COLORS.lifeSteal, 600);
-                        }
-                    }
-                }
-
-                let consumedOnHit = false;
-                if (b.isPiercing && typeof b.bossPierceRemaining === 'number') {
-                    if (b.bossPierceDamageFactor && b.bossPierceDamageFactor < 1) {
-                        b.damage = Math.max(0.1, (b.damage || 1) * b.bossPierceDamageFactor);
-                    }
-                    b.bossPierceRemaining--;
-                    if (b.bossPierceRemaining <= 0) {
-                        consumedOnHit = true;
-                    }
-                } else if (!b.isPiercing) {
-                    consumedOnHit = true;
-                }
-
-                if (b.hasShotSplit4 && !b._shotSplit4Triggered) {
-                    triggerShotSplit4(b);
-                    consumedOnHit = true;
-                }
-
-                if (consumedOnHit) {
-                    if (b.hasShotSplit && !b._shotSplitConsumed && t instanceof Boss) {
-                        spawnShotSplitChildren(b);
-                    }
-                    triggerShotSplit4(b);
-                    b.alive = false;
-                    break;
-                }
-            }
-        }
-    }
-}
-
-function checkWinConditions() {
-    if (roundEnding || bossMode.showingBuffSelection || bossMode.showingGameOver) return;
-
-    for (let i = tanks.length - 1; i >= 0; i--) {
-        const t = tanks[i];
-        if (t.hp <= 0) {
-            if (t.isClone || t.isMiniSlime) {
-                tanks.splice(i, 1);
-            } else if (t === boss) {
-                // Boss defeat is handled below
-            } else {
-                // Only trigger PvP win condition in PvP mode
-                if (gameMode === 'pvp') {
-                    if (t === p1) setScore(scoreP1, scoreP2 + 1);
-                    else setScore(scoreP1 + 1, scoreP2);
-                    setOverlay((t === p1 ? 'P2' : 'P1') + ' WIN', 1000);
-                    setOverlay((t === p1 ? 'P2' : 'P1') + ' WIN', performance.now() + 1000);
-                    setRoundEnding(true);
-                    setTimeout(() => { resetAfterKill(); setOverlay(null, 0); setRoundEnding(false); }, 1000);
-                    break;
-                }
-            }
-        }
-    }
-
-    if (!roundEnding && boss && boss.hp <= 0) {
-        const index = tanks.indexOf(boss);
-        if (index !== -1) tanks.splice(index, 1);
-        setBoss(null);
-        tanks.splice(0, tanks.length, ...tanks.filter(t => !t.isMiniSlime));
-        setOverlay('BOSS DEFEATED!', 2000);
-        setOverlay('BOSS DEFEATED!', performance.now() + 2000);
-        setRoundEnding(true);
-        setTimeout(() => {
-            setOverlay(null, 0);
-            setRoundEnding(false);
-            showBuffSelection();
-        }, 2000);
-    }
-
-    // Check for player defeat in boss mode (moved outside the loop for reliability)
-    if (!roundEnding && gameMode === 'vsboss') {
-        const alivePlayers = [p1, p2].filter(p => p && p.hp > 0);
-        if (alivePlayers.length === 0) {
-            console.log('[GAME OVER] 1. Điều kiện thua đã được kích hoạt (Tất cả người chơi đã bị hạ).');
-            setRoundEnding(true);
-            // Thêm một độ trễ nhỏ để đảm bảo frame hiện tại được vẽ xong
-            setTimeout(() => {
-                showBossGameOver();
-            }, 50);
-        }
-    }
-}
+import { spawnMiniTankCompanion } from './gameState.js';
 
 function handleBuffSpawning(dt) {
     if (gameMode === 'pvp' || gameMode === 'vsboss') {
@@ -487,13 +32,31 @@ function handleBuffSpawning(dt) {
     }
 }
 
+function cleanupBullets() {
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        const bullet = bullets[i];
+        if (!bullet || bullet.alive) continue;
+
+        if (bullet.puddleConfig && !bullet._puddleSpawned) {
+            addSlimePuddle({
+                x: bullet.x,
+                y: bullet.y,
+                ...bullet.puddleConfig
+            });
+            bullet._puddleSpawned = true;
+        }
+
+        ObjectPools.returnBullet(bullets.splice(i, 1)[0]);
+    }
+}
+
 function handleBuffPickup(now) {
     for (const buff of buffs) {
-        if (!buff.active) continue;
+        if (!buff || !buff.active) continue;
         for (const t of tanks) {
-            if (t.bossMagnetRadius && t.bossMagnetRadius > 0) {
+            if (t && t.bossMagnetRadius && t.bossMagnetRadius > 0) {
                 const magnetDist = dist(t, buff);
-                if (magnetDist < t.bossMagnetRadius) {
+                if (magnetDist > 0 && magnetDist < t.bossMagnetRadius) {
                     const pullStrength = clamp(1 - magnetDist / t.bossMagnetRadius, 0.25, 0.9);
                     const angle = Math.atan2(t.y - buff.y, t.x - buff.x);
                     buff.x += Math.cos(angle) * pullStrength * 6;
@@ -502,7 +65,7 @@ function handleBuffPickup(now) {
                 }
             }
 
-            if (dist(t, buff) < t.r + buff.r) {                
+            if (t && dist(t, buff) < t.r + buff.r) {
                 // Xác định target cho debuff
                 let debuffTarget = null;
                 
@@ -535,7 +98,7 @@ function handleBuffPickup(now) {
                         const effShrink = applyEffect(t,'shrink',10000,
                             state=>{
                                 state.originalRadius = t.r;
-                                t.r *= 0.7;
+                                if (t.r) t.r *= 0.7;
                             },
                             state=>{
                                 if(state && state.originalRadius!==undefined) t.r = state.originalRadius;
@@ -543,7 +106,6 @@ function handleBuffPickup(now) {
                             }
                         );
                         tagEffect(effShrink,'Thu nhỏ',buff.color);
-                        addPickupFX({x:t.x,y:t.y,color:buff.color,start:now});
                         showStatus(t,'Thu nhỏ',buff.color);
                         break;
                     }
@@ -563,7 +125,6 @@ function handleBuffPickup(now) {
                             }
                         );
                         tagEffect(effRapid,'Nạp nhanh',buff.color);
-                        addPickupFX({x:t.x,y:t.y,color:buff.color,start:now});
                         showStatus(t,'Nạp nhanh',buff.color);
                         break;
                     }
@@ -572,7 +133,8 @@ function handleBuffPickup(now) {
                         break;
                     case 'clone':
                         flashMsg(`${t===p1?'P1':'P2'} tạo phân thân!`);
-                        spawnClone(t);
+                        spawnMiniTankCompanion(t);
+                        applyEffect(t, 'clone', 800); // Kích hoạt hiệu ứng hình ảnh
                         addPickupFX({x:t.x,y:t.y,color:buff.color,start:now});
                         showStatus(t,'Phân thân',buff.color);
                         break;
@@ -593,20 +155,12 @@ function handleBuffPickup(now) {
                         break;
                     case 'nuke': {
                         flashMsg('Bom nguyên tử kích hoạt!');
+                        triggerNukeAnimation(); // Kích hoạt hiệu ứng nổ
                         const nukeColor = buff.color || BUFF_COLORS.nuke;
                         tanks.forEach(tk=>{
-                            const isPlayer = (tk === p1 || tk === p2);
-                            if(tk.hp > 0 && !(devGodMode && isPlayer)){
+                            if(tk && tk.hp > 0){
                                 tk.hp = Math.min(tk.maxHp, 0.1);
-                                addPickupFX({x:tk.x,y:tk.y,color:nukeColor,start:now, duration:600});
                             }
-                        });
-                        addExplosion({
-                            x: W/2,
-                            y: H/2,
-                            radius: Math.max(W,H),
-                            startTime: performance.now(),
-                            duration: 600
                         });
                         break;
                     }
@@ -638,7 +192,6 @@ function handleBuffPickup(now) {
                             }
                         );
                         tagEffect(effFury,'Cuồng nộ',buff.color);
-                        addPickupFX({x:t.x,y:t.y,color:buff.color,start:now});
                         showStatus(t,'Cuồng nộ',buff.color);
                         break;
                     }
@@ -659,7 +212,6 @@ function handleBuffPickup(now) {
                             }
                         );
                         tagEffect(effGiant,'Khổng lồ',buff.color);
-                        addPickupFX({x:t.x,y:t.y,color:buff.color,start:now});
                         showStatus(t,'Khổng lồ',buff.color);
                         showStatus(enemy,'Bị phóng to!',buff.color,2000);
                         break;
@@ -695,7 +247,6 @@ function handleBuffPickup(now) {
                             }
                         );
                         tagEffect(effReverse,'Đảo phím',buff.color);
-                        addPickupFX({x:t.x,y:t.y,color:buff.color,start:now});
                         showStatus(t,'Đảo phím',buff.color);
                         showStatus(ctrlEnemy,'Phím bị đảo',buff.color,2000);
                         break;
@@ -709,7 +260,6 @@ function handleBuffPickup(now) {
                             ()=>{target.rooted = false;}
                         );
                         tagEffect(effRoot,'Bị trói chân',buff.color);
-                        addPickupFX({x:t.x,y:t.y,color:buff.color,start:now});
                         showStatus(t,'Trói chân',buff.color);
                         showStatus(target,'Bị trói chân',buff.color,2000);
                         break;
@@ -726,7 +276,6 @@ function handleBuffPickup(now) {
                             ()=>{enemy.silenced = false;}
                         );
                         tagEffect(effSilence,'Câm lặng',buff.color);
-                        addPickupFX({x:t.x,y:t.y,color:buff.color,start:now});
                         showStatus(t,'Câm lặng',buff.color);
                         showStatus(enemy,'Không thể bắn!',buff.color,2000);
                         break;
@@ -744,7 +293,6 @@ function handleBuffPickup(now) {
                             ()=>{enemy.possession = false; enemy.possessionFired = false;}
                         );
                         tagEffect(effPossession,'Thôi miên',buff.color);
-                        addPickupFX({x:t.x,y:t.y,color:buff.color,start:now});
                         showStatus(t,'Thôi miên',buff.color);
                         showStatus(enemy,'Bị thôi miên!',buff.color,2000);
                         break;
@@ -758,18 +306,10 @@ function handleBuffPickup(now) {
     buffs.splice(0, buffs.length, ...buffs.filter(b => b.active));
 }
 
-function cleanupBullets() {
-    for (let i = bullets.length - 1; i >= 0; i--) {
-        if (!bullets[i].alive) {
-            ObjectPools.returnBullet(bullets.splice(i, 1)[0]);
-        }
-    }
-}
-
 function handleTrailDamage(dt, now) {
     const TRAIL_DPS = 0.2; // 0.2 HP mỗi giây
     let baseDamage = TRAIL_DPS * dt / 1000;
-
+    if (baseDamage <= 0) return;
     for (const tank of tanks) {
         if (tank.hp <= 0 || tank.invisible) continue;
 
@@ -778,13 +318,9 @@ function handleTrailDamage(dt, now) {
             const collisionRadius = tank.r + (trail.width || 6) / 2;
             const distSq = pointToLineDistanceSq(tank.x, tank.y, trail.x, trail.y, trail.endX, trail.endY);
             if (distSq < collisionRadius * collisionRadius) {
-                const isPlayer = (tank === p1 || tank === p2);
-                if (devGodMode && isPlayer) continue;
-
                 let damage = baseDamage;
-                damage = absorbDamageWithMicroShield(tank, damage, now);
                 if (damage <= 0) continue;
-                tank.hp = Math.max(0, tank.hp - damage);
+                tank.hp = Math.max(0, tank.hp - damage); // Simplified damage application
 
                 // Apply a short burning visual effect
                 const burnEffect = applyEffect(tank, 'burning', 250,
@@ -827,105 +363,8 @@ export function spawnBuff(type) {
     buffs.push(new Buff(x, y, type));
 }
 
-export function resetAfterKill() {
-    if (gameMode === 'vsboss') {
-        console.log('[RESET] Starting resetAfterKill for boss mode.');
-        setRoundEnding(false); // Reset round ending state
-        p1.x = 110; p1.y = 110; p1.vx = 0; p1.vy = 0; p1.angle = 0;
-        p2.x = 790; p2.y = 450; p2.vx = 0; p2.vy = 0; p2.angle = Math.PI;
-        if (boss) {
-            boss.reset();
-        }
-        setBullets([]); setBuffs([]);
-        setTanks(tanks.filter(t => !t.isClone && !t.isMiniSlime));
-        if (!tanks.includes(p1)) tanks.push(p1);
-        if (!tanks.includes(p2)) tanks.push(p2);
-        if (typeof reapplyPermanentBuffs === 'function') reapplyPermanentBuffs();
-        p1.hp = p1.maxHp;
-        p2.hp = p2.maxHp;
-        console.log('[RESET] Player HP restored immediately after reset.');
-    } else {
-        if (typeof p1.reset === 'function') p1.reset();
-        if (typeof p2.reset === 'function') p2.reset();
-        p1.hp = p1.maxHp; p1.x = 110; p1.y = 110; p1.vx = 0; p1.vy = 0; p1.angle = 0;
-        p2.hp = p2.maxHp; p2.x = 790; p2.y = 450; p2.vx = 0; p2.vy = 0; p2.angle = Math.PI;
-        p1.possession = false; p1.possessionFired = false;
-        p2.possession = false; p2.possessionFired = false;
-        p1.silenced = false; p2.silenced = false;
-        p1.rooted = false; p2.rooted = false;
-        p1.invisible = false; p2.invisible = false;
-        setBullets([]);
-        setBuffs([]);
-
-        const playersOnly = [p1, p2];
-        setTanks(playersOnly);
-        setBoss(null);
-    }
-    clearObstacles();
-    clearAnimations();
-    randomObstacles();
-    if (typeof applyStatSettings === 'function') applyStatSettings();
-}
-
-export function spawnClone(tank) {
-    const clone = new Tank(tank.x + 30, tank.y + 30, tank.color, {});
-    clone.isClone = true;
-    clone.hp = tank.hp;
-    clone.moveSpeed = 0;
-    clone.friction = 1;
-    clone.baseMoveSpeed = clone.moveSpeed;
-    clone.baseFriction = clone.friction;
-    clone.baseReloadRate = clone.reloadRate;
-    clone.baseRadius = clone.r;
-    clone.baseControls = { ...clone.controls };
-    clone.reloadRate = 0;
-    clone.reloadCooldown = 0;
-    clone.explosive = tank.explosive || false;
-    clone.bigBullet = tank.bigBullet || false;
-    clone.ricochet = tank.ricochet || false;
-    clone.pierce = tank.pierce || false;
-    clone.poisonBullet = tank.poisonBullet || false;
-    clone.canShoot = function (now) { return now - this.lastShot >= 3000 && this.ammo > 0; };
-    clone.maxAmmo = 3;
-    clone.ammo = clone.maxAmmo;
-    clone.update = function (dt, input) {
-        Tank.prototype.update.call(this, dt, {});
-        this.speed = 0;
-        let target = null;
-        if (gameMode === 'vsboss' && boss) {
-            target = boss;
-        } else {
-            const opponent = (tank === p1) ? p2 : p1;
-            if (opponent && opponent.hp > 0) {
-                target = opponent;
-            } else {
-                target = tanks.find(t => t.isClone && t.hp > 0 && t.color !== this.color) || null;
-            }
-        }
-        if (target && target.hp > 0) {
-            this.angle = Math.atan2(target.y - this.y, target.x - this.x);
-            const now = performance.now();
-            if (this.canShoot(now)) {
-                const b = this.shoot(now);
-                if (b) bullets.push(b);
-            }
-        } else {
-            // No target
-        }
-        if (this.ammo <= 0 && !this.pendingRemoval) {
-            this.pendingRemoval = true;
-            this.fadeOutTimer = 600;
-        }
-    };
-    tanks.push(clone);
-}
-
-export function spawnBot() {
-    spawnClone(p1);
-    flashMsg('Bot hỗ trợ xuất hiện!');
-}
-
 function updateMiniSlimeAI(miniSlime, dt) {
+    if (!miniSlime || miniSlime.hp <= 0) return;
     let target = null;
     let minDist = Infinity;
     [p1, p2].forEach(player => {
@@ -938,29 +377,86 @@ function updateMiniSlimeAI(miniSlime, dt) {
         }
     });
     if (!target) return;
-    miniSlime.angle = Math.atan2(target.y - miniSlime.y, target.x - miniSlime.x);
+
     const now = performance.now();
-    if (now - miniSlime.lastShot >= miniSlime.reload) {
-        const bullet = miniSlime.shoot(now);
-        if (bullet) {
-            bullets.push(bullet);
-        }
+    const dashCd = miniSlime.dashCooldown || 1200;
+    const projCd = miniSlime.projectileCooldown || 4000;
+    const distToTarget = dist(miniSlime, target);
+    miniSlime.angle = Math.atan2(target.y - miniSlime.y, target.x - miniSlime.x);
+
+    if (now - (miniSlime.lastAdaptiveDash || 0) >= dashCd && distToTarget <= (miniSlime.dashRange || 240)) {
+        performMiniSlimeDash(miniSlime, target);
+        miniSlime.lastAdaptiveDash = now;
+        return; // skip extra movement this frame after dash burst
     }
 
-    // Chaotic movement
+    if (now - (miniSlime.lastAdaptiveShot || 0) >= projCd) {
+        fireMiniSlimeProjectile(miniSlime, target);
+        miniSlime.lastAdaptiveShot = now;
+    }
+
     miniSlime.chaosMoveTimer += dt;
-    if (miniSlime.chaosMoveTimer > 1000) { // Change direction every second
+    if (miniSlime.chaosMoveTimer > 900) {
         miniSlime.chaosMoveAngle = Math.random() * Math.PI * 2;
         miniSlime.chaosMoveTimer = 0;
     }
-    
+
+    const chaseWeight = clamp(1 - distToTarget / 320, 0.35, 0.9);
+    const blendX = Math.cos(miniSlime.chaosMoveAngle) * (1 - chaseWeight) + Math.cos(miniSlime.angle) * chaseWeight;
+    const blendY = Math.sin(miniSlime.chaosMoveAngle) * (1 - chaseWeight) + Math.sin(miniSlime.angle) * chaseWeight;
+    const moveAngle = Math.atan2(blendY, blendX);
+
     miniSlime.speed += miniSlime.moveSpeed * dt / 16;
     miniSlime.speed *= miniSlime.friction;
 
-    const moveX = Math.cos(miniSlime.chaosMoveAngle) * miniSlime.speed;
-    const moveY = Math.sin(miniSlime.chaosMoveAngle) * miniSlime.speed;
+    const moveX = Math.cos(moveAngle) * miniSlime.speed;
+    const moveY = Math.sin(moveAngle) * miniSlime.speed;
     miniSlime.x = clamp(miniSlime.x + moveX, miniSlime.r, W - miniSlime.r);
     miniSlime.y = clamp(miniSlime.y + moveY, miniSlime.r, H - miniSlime.r);
+}
+
+function performMiniSlimeDash(miniSlime, target) {
+    const dashAngle = Math.atan2(target.y - miniSlime.y, target.x - miniSlime.x);
+    const dashDist = miniSlime.dashDistance || 190;
+    const destX = clamp(miniSlime.x + Math.cos(dashAngle) * dashDist, miniSlime.r, W - miniSlime.r);
+    const destY = clamp(miniSlime.y + Math.sin(dashAngle) * dashDist, miniSlime.r, H - miniSlime.r);
+    addExplosion({ x: miniSlime.x, y: miniSlime.y, radius: 25, duration: 200, color: '#4ade80' });
+    miniSlime.x = destX;
+    miniSlime.y = destY;
+    addExplosion({ x: miniSlime.x, y: miniSlime.y, radius: 30, duration: 220, color: '#16a34a' });
+
+    if (target && target.hp > 0 && dist(miniSlime, target) <= miniSlime.r + target.r + 6) {
+        const damage = miniSlime.dashDamage || 1.5;
+        const skipDamage = devGodMode && (target === p1 || target === p2);
+        if (!skipDamage) {
+            target.hp = Math.max(0, target.hp - damage);
+            showStatus(target, `-${damage} HP`, '#f97316', 900);
+        }
+    }
+}
+
+function fireMiniSlimeProjectile(miniSlime, target) {
+    const angle = Math.atan2(target.y - miniSlime.y, target.x - miniSlime.x) + (Math.random() - 0.5) * 0.18;
+    const speed = 7.3;
+    const bullet = new Bullet(miniSlime.x, miniSlime.y, angle, miniSlime);
+    bullet.owner = miniSlime;
+    bullet.damage = 1;
+    bullet.r = 7;
+    bullet.color = '#065f46';
+    bullet.glow = true;
+    bullet.glowColor = '#bbf7d0';
+    bullet.vx = Math.cos(angle) * speed;
+    bullet.vy = Math.sin(angle) * speed;
+    bullet.bossVisual = 'slime';
+    bullet.puddleConfig = {
+        type: 'sticky',
+        radius: 55,
+        duration: 2800,
+        slowPlayerFactor: 0.78,
+        slowBulletFactor: 0.85,
+        color: '#22c55e'
+    };
+    bullets.push(bullet);
 }
 
 function handlePlayerBossCollision(now) {
@@ -993,10 +489,57 @@ function handlePlayerBossCollision(now) {
     }
 }
 
+function applyCorrosiveCorePassive(now) {
+    const activePlayers = [p1, p2];
+    if (!boss || boss.bossType !== 'slime' || !boss.isCorruptedPhase || boss.hp <= 0) {
+        activePlayers.forEach(player => {
+            if (!player) return;
+            player.isInCorrosiveGel = false;
+            player.corrosiveDamageFactor = 1;
+        });
+        if (boss) boss.environmentSpeedMultiplier = 1;
+        return;
+    }
+
+    const corrosiveTickInterval = 500;
+    const corrosiveTickDamage = 0.5;
+
+    activePlayers.forEach(player => {
+        if (!player || player.hp <= 0 || player.invisible) return;
+        const puddle = getCorrosivePuddleAt(player.x, player.y);
+        if (puddle) {
+            player.isInCorrosiveGel = true;
+            player.corrosiveDamageFactor = puddle.playerDamageDebuff ?? 0.8;
+            if (!player.lastCorrosiveTick || now - player.lastCorrosiveTick >= corrosiveTickInterval) {
+                const isPlayer = (player === p1 || player === p2);
+                const skipDamage = devGodMode && isPlayer;
+                if (!skipDamage) {
+                    player.hp = Math.max(0, player.hp - corrosiveTickDamage);
+                    showStatus(player, `-${corrosiveTickDamage} HP ☣️`, '#84cc16', 600);
+                }
+                player.lastCorrosiveTick = now;
+            }
+        } else {
+            player.isInCorrosiveGel = false;
+            player.corrosiveDamageFactor = 1;
+            player.lastCorrosiveTick = 0;
+        }
+    });
+
+    const bossPuddle = getCorrosivePuddleAt(boss.x, boss.y);
+    if (bossPuddle && bossPuddle.createdBy === 'slime_corrupted') {
+        boss.environmentSpeedMultiplier = bossPuddle.bossSpeedBuff ?? 1.15;
+    } else {
+        boss.environmentSpeedMultiplier = 1;
+    }
+}
+
 export function updateGame(dt, now) {
     handlePlayerShooting(dt, now);
-    handleBulletCollisions(now);
+    handleBulletCollisions(now, bullets);
     handleTrailDamage(dt, now);
+    updateSlimePuddles(now);
+    applyCorrosiveCorePassive(now);
     if (gameMode === 'vsboss') handlePlayerBossCollision(now);
     checkWinConditions();
     handleBuffSpawning(dt);
@@ -1007,144 +550,4 @@ export function updateGame(dt, now) {
             updateMiniSlimeAI(tank, dt);
         }
     });
-}
-
-export function triggerDevAction(rawKey, context = {}) {
-    if (!rawKey) return false;
-    const key = rawKey.toLowerCase();
-
-    switch (key) {
-        // SPAWN BUFF CỤ THỂ
-        case 'z': spawnBuff('heal'); flashMsg('Tạo buff: hồi máu'); return true;
-        case '2': spawnBuff('speed'); flashMsg('Tạo buff: tăng tốc'); return true;
-        case 'c': spawnBuff('homing'); flashMsg('Tạo buff: đạn tự dẫn'); return true;
-        case 'v': spawnBuff('invis'); flashMsg('Tạo buff: tàng hình'); return true;
-        case '5':
-            spawnBuff('shrink');
-            flashMsg('Tạo buff: thu nhỏ');
-            if (context.event?.shiftKey) {
-                const dmgTestBullet = new Bullet(p1.x + 50, p1.y, 0, p1);
-                console.log('🧪 TEST BULLET DAMAGE');
-                console.log('P1 damage:', p1.damage);
-                console.log('Bullet damage:', dmgTestBullet.damage);
-                console.log('P1 bossBuffStats:', p1.bossBuffStats);
-                bullets.push(dmgTestBullet);
-                flashMsg(`🧪 Test bullet: P1 dmg=${p1.damage}, bullet dmg=${dmgTestBullet.damage}`);
-            }
-            return true;
-        case '6': spawnBuff('shield'); flashMsg('Tạo buff: khiên'); return true;
-        case '7': spawnBuff('rapidfire'); flashMsg('Tạo buff: nạp nhanh'); return true;
-        case '8': spawnBuff('bigbullet'); flashMsg('Tạo buff: đạn to'); return true;
-        case '9': spawnBuff('clone'); flashMsg('Tạo buff: phân thân'); return true;
-        case '0': spawnBuff('shotgun'); flashMsg('Tạo buff: bắn chùm'); return true;
-        case 'q': spawnBuff('ricochet'); flashMsg('Tạo buff: nảy vô hạn'); return true;
-        case 'y': spawnBuff('giantEnemy'); flashMsg('Tạo buff: kẻ địch khổng lồ'); return true;
-        case 'e': spawnBuff('reverse'); flashMsg('Tạo buff: đảo phím'); return true;
-        case 'r': spawnBuff('explosive'); flashMsg('Tạo buff: đạn nổ'); return true;
-        case 't':
-            spawnBuff('root');
-            flashMsg('Tạo buff: trói chân');
-            if (context.event?.shiftKey && boss && boss.bossType === 'slime') {
-                boss.jumpAttack(p1);
-                flashMsg('🧪 TEST: Force slime jump!');
-            }
-            return true;
-        case 'u': spawnBuff('pierce'); flashMsg('Tạo buff: đạn xuyên'); return true;
-        case 'i': spawnBuff('poison'); flashMsg('Tạo buff: đạn độc'); return true;
-        case 'p': spawnBuff('nuke'); flashMsg('Tạo buff: bom nguyên tử'); return true;
-        case 'j': spawnBuff('trail'); flashMsg('Tạo buff: dung nham'); return true;
-        case 'l': spawnBuff('possession'); flashMsg('Tạo buff: thôi miên'); return true;
-        case 'x': spawnBuff('fury'); flashMsg('Tạo buff: cuồng nộ'); return true;
-        case 'k': spawnBuff('silence'); flashMsg('Tạo buff: câm lặng'); return true;
-
-        // PHÍM KHÁC (giữ nguyên các chức năng Dev Mode hiện tại)
-        case 'h':
-            p1.hp = p1.maxHp;
-            p2.hp = p2.maxHp;
-            flashMsg('HP full');
-            return true;
-        case 'm':
-            setDevOneHitKill(!devOneHitKill);
-            flashMsg(devOneHitKill ? '1 Hit Kill ON' : '1 Hit Kill OFF');
-            if (devOneHitKill) {
-                showStatus(p1, 'Sát thương 999999', '#ff0000', 900);
-                showStatus(p2, 'Sát thương 999999', '#ff0000', 900);
-            }
-            syncSettingsUI();
-            return true;
-        case '1':
-            if (gameMode === 'vsboss') {
-                console.log('🧪 ADDING ALL BUFFS');
-                const allBuffs = ['muscle', 'thickSkin', 'agility', 'bulletSpeed'];
-                allBuffs.forEach(buff => {
-                    if (!bossMode.permanentBuffs.includes(buff)) {
-                        bossMode.permanentBuffs.push(buff);
-                        applyBossModeBuff(buff);
-                    }
-                });
-                console.log('All buffs added:', bossMode.permanentBuffs);
-                console.log('P1 final stats:', {
-                    damage: p1.damage,
-                    maxHp: p1.maxHp,
-                    hp: p1.hp,
-                    moveSpeed: p1.moveSpeed?.toFixed(3),
-                    bulletSpeed: p1.bulletSpeedMultiplier?.toFixed(2)
-                });
-                flashMsg('🧪 Added ALL buffs for testing!');
-            } else {
-                flashMsg('❌ Not in boss mode!');
-            }
-            return true;
-        case '3':
-            if (gameMode === 'vsboss') {
-                console.log('🧪 CLEARING ALL BUFFS');
-                console.log('Before clear:', bossMode.permanentBuffs);
-                bossMode.permanentBuffs = [];
-                reapplyPermanentBuffs();
-                console.log('After clear:', bossMode.permanentBuffs);
-                console.log('P1 stats after clear:', { damage: p1.damage, maxHp: p1.maxHp, hp: p1.hp });
-                flashMsg('🧪 Cleared all buffs!');
-            } else {
-                flashMsg('❌ Not in boss mode!');
-            }
-            return true;
-        case 'b': {
-            const devBullet = new Bullet(450, 280, Math.random() * Math.PI * 2, p1);
-            bullets.push(devBullet);
-            flashMsg('Spawn bullet');
-            return true;
-        }
-        case 'o':
-            resetAfterKill();
-            flashMsg('Reset game');
-            return true;
-        case 'f':
-            p1.reloadRate *= 5;
-            p2.reloadRate *= 5;
-            flashMsg('Fast reload');
-            return true;
-        case 'n':
-            setDevNoWalls(!devNoWalls);
-            flashMsg(devNoWalls ? 'No Walls ON' : 'No Walls OFF');
-            syncSettingsUI();
-            return true;
-        case 'g':
-            setDevGodMode(!devGodMode);
-            flashMsg(devGodMode ? 'Bất tử ON' : 'Bất tử OFF');
-            if (devGodMode) {
-                showStatus(p1, 'Miễn sát thương', '#ffe27a', 900);
-                showStatus(p2, 'Miễn sát thương', '#ffe27a', 900);
-            }
-            syncSettingsUI();
-            return true;
-    }
-
-    return false;
-}
-
-export function handleDevKeys(e) {
-    if (!e || typeof e.key !== 'string') return false;
-    const handled = triggerDevAction(e.key, { event: e });
-    if (handled && typeof e.preventDefault === 'function') e.preventDefault();
-    return handled;
 }

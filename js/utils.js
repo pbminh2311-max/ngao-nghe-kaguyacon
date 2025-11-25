@@ -2,6 +2,12 @@ export const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 export const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 export const normalizeAngle=angle=>Math.atan2(Math.sin(angle),Math.cos(angle));
 
+export function getDebuffDurationMultiplier(target) {
+    if (!target) return 1;
+    const value = typeof target.debuffDurationMultiplier === 'number' ? target.debuffDurationMultiplier : 1;
+    return clamp(value, 0.3, 1);
+}
+
 export function getBossBuffName(buffType) {
     const names = {
         lifeSteal: '🧛 Hút Máu',
@@ -19,7 +25,14 @@ export function getBossBuffName(buffType) {
         bossShield: '🛡️ Khiên Bảo Hộ',
         slowMotion10: '🐢 Làm Chậm 20%',
         fireIceShot: '🔥❄️ Đạn Hỏa/Băng',
-        criticalHit: '💥 Chí Mạng'
+        criticalHit: '💥 Chí Mạng',
+        damageBoost: '💪 Tăng Damage',
+        maxHpUp: '❤️ Tăng Máu Tối Đa',
+        bulletDeflect: '🛡️ Phản Xạ Đạn',
+        debuffResistance: '🧬 Kháng Hiệu Ứng Xấu',
+        luckUp: '🍀 May Mắn',
+        miniTank: '🤖 Xe Tăng Mini',
+        doubleShot: '➿ Nhân Đôi Đạn'
     };
     return names[buffType] || buffType;
 }
@@ -34,10 +47,20 @@ export function roundRect(ctx,x,y,w,h,r,fill,stroke){
 export function drawEffectRing(ctx,x,y,radius,color,{lineWidth=3,alpha=1,dash=null,glow=false}={}){
     if(radius<=0) return;
     ctx.save();
+
+    // Lớp lót màu tối để tăng độ tương phản trên nền sáng
+    ctx.globalAlpha = alpha * 0.35;
+    ctx.strokeStyle = 'rgba(20, 30, 45, 0.8)';
+    ctx.lineWidth = lineWidth + 2; // Dày hơn một chút
+    if(dash) ctx.setLineDash(dash);
+    ctx.beginPath();
+    ctx.arc(x,y,radius,0,Math.PI*2);
+    ctx.stroke();
+
+    // Lớp hiệu ứng chính
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;
     ctx.lineWidth = lineWidth;
-    if(dash) ctx.setLineDash(dash);
     if(glow){
         ctx.shadowColor = color;
         ctx.shadowBlur = 14;
@@ -45,6 +68,7 @@ export function drawEffectRing(ctx,x,y,radius,color,{lineWidth=3,alpha=1,dash=nu
     ctx.beginPath();
     ctx.arc(x,y,radius,0,Math.PI*2);
     ctx.stroke();
+
     ctx.restore();
 }
 
